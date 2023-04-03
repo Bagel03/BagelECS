@@ -1,0 +1,1 @@
+I use docusaurus for building the website and documentation from markdown. Almost all docs are in the /docs directory, and are automatically uploaded to the website on pushes to the repo. It is not really recommend to install all the dependencies here, it is really big for no reason.

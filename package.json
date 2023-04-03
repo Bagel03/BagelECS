@@ -1,0 +1,21 @@
+{
+  "name": "bagelecs",
+  "version": "1.0.0",
+  "description": "A fast ecs with great dx",
+  "main": "dist/bundle.js",
+  "types": "dist/types.d.ts",
+  "type": "module",
+  "author": "Bagel03",
+  "license": "ISC",
+  "keywords": [
+    "ECS",
+    "Typescript"
+  ],
+  "scripts": {
+    "build": "esbuild bundle=./src/exports/index.ts bundle.worker=./src/exports/worker.ts --bundle --outdir=./dist --sourcemap --format=esm --minify",
+    "types": "dts-bundle-generator src/exports/index.ts -o=\"./dist/types.d.ts\" "
+  },
+  "exports": {
+    "default": "./dist/bundle.js"
+  }
+}

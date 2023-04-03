@@ -1,0 +1,40 @@
+{
+    "folders": [
+        {
+            "path": "./"
+        }
+    ],
+    "settings": {
+        "files.exclude": {
+            "**/.git": true,
+            "**/.svn": true,
+            "**/.hg": true,
+            "**/CVS": true,
+            "**/.DS_Store": true,
+            "**/Thumbs.db": true,
+            // "**/dist": true,
+            "package-lock.json": true
+        },
+        "workbench.colorCustomizations": {
+            "activityBar.activeBackground": "#2488e3",
+            "activityBar.background": "#2488e3",
+            "activityBar.foreground": "#e7e7e7",
+            "activityBar.inactiveForeground": "#e7e7e799",
+            "activityBarBadge.background": "#f4aad1",
+            "activityBarBadge.foreground": "#15202b",
+            "commandCenter.border": "#e7e7e799",
+            "sash.hoverBorder": "#2488e3",
+            "statusBar.background": "#186ebc",
+            "statusBar.foreground": "#e7e7e7",
+            "statusBarItem.hoverBackground": "#2488e3",
+            "statusBarItem.remoteBackground": "#186ebc",
+            "statusBarItem.remoteForeground": "#e7e7e7",
+            "titleBar.activeBackground": "#186ebc",
+            "titleBar.activeForeground": "#e7e7e7",
+            "titleBar.inactiveBackground": "#186ebc99",
+            "titleBar.inactiveForeground": "#e7e7e799"
+        },
+        "peacock.color": "#186ebc",
+        "cSpell.words": ["Ents"]
+    }
+}

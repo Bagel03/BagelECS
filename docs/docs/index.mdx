@@ -1,0 +1,39 @@
+---
+title: "Overview"
+sidebar_position: 1
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# BagelECS
+
+BagelECS is my attempt to create a typescript ECS implementation that is both performance oriented and human friendly.
+
+## Features:
+
+-   **🔥 Fast**: Using typed arrays and other performance optimizations, users should see speeds similar to the fastest web implementations, including [bitecs](https://github.com/NateTheGreatt/bitECS) and [wolfecs](https://github.com/EnderShadow8/wolf-ecs).
+-   📊 **Multithreaded**: Get even more speed out of your app without any major refactoring, with a simple API to run multiple systems concurrently
+-   🎯 **Type Safe**: All code is written in typescript, giving you full autocomplete and type checking, in spots that other libraries might struggle.
+-   📖 **Human Readable**: BagelECS was written because many of the previously mentioned performance based ECS's were a pain to read and write. BagelECS's API aims to mirror the way your brain sees your world.
+-   🧪 **No Limits:** BagelECS has very few restrictions on when and where you can do what. No need to setup lots of boilerplate, or define all your components beforehand. Do what you want when you want to.
+
+## Install
+
+<Tabs>
+    <TabItem value="npm" label="npm" default>
+        <pre> npm i bagelecs </pre>
+    </TabItem>
+    <TabItem value="yarn" label="yarn">
+        <pre> yarn add bagelecs </pre>
+    </TabItem>
+    <TabItem value="pnpm" label="pnpm">
+        <pre> pnpm add bagelecs </pre>
+    </TabItem>
+</Tabs>
+
+## Next steps
+
+-   To look at actual code for everything BagelECS has to offer, check out the [Quick Start](./quick-start.md)
+-   For handwritten explanations of all available APIs, check out the [Guides](./reference/World.md)
+-   To see type definitions for the whole library, see the [API](./api/api.md).
