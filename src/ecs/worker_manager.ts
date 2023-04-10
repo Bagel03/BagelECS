@@ -1,11 +1,12 @@
-import { Logger } from "../utils/logger.js";
-import type { Tree } from "../utils/types.js";
-import { Archetype } from "./archetype.js";
-import { ID_MAP } from "./component.js";
-import { Query } from "./query.js";
-import { CUSTOM_COMPONENT_STORAGES } from "./storage.js";
-import { CustomSystem, System } from "./system.js";
-import { World } from "./world.js";
+import { Logger } from "../utils/logger";
+import type { Tree } from "../utils/types";
+import { Archetype } from "./archetype";
+import { ID_MAP } from "./component";
+import { Query } from "./query";
+import { CUSTOM_COMPONENT_STORAGES } from "./storage";
+import { System, InternalSystem } from "./system";
+import { World } from "./world";
+import { awaitMessage } from "../utils/await_worker";
 
 export enum MessageType {
     init,
@@ -20,11 +21,7 @@ export class WorkerManager {
     constructor(private readonly world: World) {}
 
     async loadWorkerSystem(url: string) {
-        const {
-            default: system,
-        }: { default: ReturnType<typeof CustomSystem> } = await import(url);
-
-        Logger.log(`Loading remote system ${system.name} (id: ${system.id})`);
+        Logger.log(`Loading remote system`);
         const worker = new Worker(url, {
             type: "module",
         });
@@ -38,19 +35,26 @@ export class WorkerManager {
             customStorages: CUSTOM_COMPONENT_STORAGES,
         });
 
-        await new Promise<void>((res, rej) => {
-            worker.onmessage = (ev) => {
-                if (ev.data.type == MessageType.init) res();
-            };
-        });
+        // const {name, id} = await new Promise<{
+        //     name: string,
+        //     id: number
+        // }>((res, rej) => {
+        //     worker.onmessage = (ev) => {
+        //         if (ev.data.type == MessageType.init) res(ev.data);
+        //     };
+        // });
 
-        this.workers[system.id] = worker;
-        Logger.logOK(`Remote system ${system.name} (${system.id}) is ready`);
+        const { name, id } = await awaitMessage<{ name: string; id: number }>(
+            worker,
+            MessageType.init
+        );
+        this.workers[id] = worker;
+        Logger.logOK(`Remote system ${name} (${id}) is ready`);
 
-        return system.id;
+        return id;
     }
 
-    update(id: number) {
+    async update(id: number) {
         this.workers[id].postMessage({ type: MessageType.update });
     }
 

@@ -1,4 +1,4 @@
-import { Class } from "./types.js";
+import { Class } from "./types";
 
 /** @internal */
 export const isClass = (val: any): val is Class<any> => {

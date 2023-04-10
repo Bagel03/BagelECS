@@ -64,6 +64,12 @@ Type.nullable(Type.enum("D", "E", "F"));
 // If you need a nullable built-in type (number, bool, any, string, entity), you can also just provide that string:
 Type.nullable("number");
 Type.nullable("entity");
+
+// Use Type.tuple() to represent a ts-like tuple of types inside your component. They can be accessed by comp.prop[i]
+Type.tuple(Type.number, Type.string, Type.bool);
+
+// Use type.vec to represent a fixed length vector of elements
+Type.vec(Type.number, 10);
 ```
 
 All of these return a `TypeId`, which you use when accessing a components data within an entity. For that reason, using the correct type when defining the schema will result in correct tapings in any place that component is referenced (`ent.get()`).

@@ -1,6 +1,6 @@
-import { Class } from "../utils/types.js";
-import { Component, InternalComponent, Type, TypeId } from "./component.js";
-import { World } from "./world.js";
+import { Class } from "../utils/types";
+import { Component, InternalComponent, Type, TypeId } from "./component";
+import { World } from "./world";
 export type intoID = number | { getId(): number };
 
 export interface EntityAPI {

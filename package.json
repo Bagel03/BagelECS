@@ -13,9 +13,17 @@
   ],
   "scripts": {
     "build": "esbuild bundle=./src/exports/index.ts bundle.worker=./src/exports/worker.ts --bundle --outdir=./dist --sourcemap --format=esm --minify",
-    "types": "dts-bundle-generator src/exports/index.ts -o=\"./dist/types.d.ts\" "
+    "types": "node scripts/types.js"
   },
   "exports": {
-    "default": "./dist/bundle.js"
+    ".": "./src/bundle.js",
+    "./remote": "./dist/bundle.worker.js"
+  },
+  "files": [
+    "./dist/**/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^18.15.11",
+    "npm-dts": "^1.3.12"
   }
 }

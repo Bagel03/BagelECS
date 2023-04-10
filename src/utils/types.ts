@@ -2,6 +2,7 @@ export type Class<T> = new (...args: any[]) => T;
 
 export type Tree<T> =
     | T
+    | T[]
     | {
           readonly [idx: string]: Tree<T>;
       };
@@ -19,3 +20,9 @@ export type KeysOfObjWhere<O extends {}, W> = keyof {
 export type DeepWriteable<T> = {
     -readonly [P in keyof T]: DeepWriteable<T[P]>;
 };
+
+export type FixedLengthArray<
+    T,
+    L extends number,
+    A extends unknown[] = []
+> = A["length"] extends L ? A : FixedLengthArray<T, L, [...A, T]>;

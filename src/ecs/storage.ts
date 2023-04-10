@@ -1,6 +1,6 @@
-import { Class } from "../utils/types.js";
-import { Entity } from "./entity.js";
-import { World } from "./world.js";
+import { Class } from "../utils/types";
+import { Entity } from "./entity";
+import { World } from "./world";
 
 export class StorageManager {
     public readonly storages: ComponentStorage[] = [];
@@ -197,14 +197,13 @@ export const registerEnumComponentStorage = <T extends string>(
     return id;
 };
 
-export const registerNullableComponentStorage = <T>(
+const createNullableComponentStorage = <T>(
+    id: number,
     originalStorageId: number
 ) => {
-    const id = COMPONENT_STORAGES.size;
-
     const superStorage = COMPONENT_STORAGES.get(originalStorageId)!;
 
-    class NullableComponentStorage
+    return class NullableComponentStorage
         extends (superStorage as any)
         implements ComponentStorage<T>
     {
@@ -233,9 +232,16 @@ export const registerNullableComponentStorage = <T>(
         deleteEnt(id: number): void {
             super.deleteEnt(id);
         }
-    }
+    };
+};
 
-    COMPONENT_STORAGES.set(id, NullableComponentStorage);
+export const registerNullableComponentStorage = <T>(
+    originalStorageId: number
+) => {
+    const id = COMPONENT_STORAGES.size;
+    const storage = createNullableComponentStorage(id, originalStorageId);
+
+    COMPONENT_STORAGES.set(id, storage);
     CUSTOM_COMPONENT_STORAGES.set(id, {
         type: "nullable",
         originalStorageId,
@@ -257,6 +263,13 @@ export function loadCustomComponentStorages(customStorages: Map<number, any>) {
         switch (data.type) {
             case "enum": {
                 const storage = createEnumComponentStorage(id, data.options);
+                COMPONENT_STORAGES.set(id, storage);
+            }
+            case "nullable": {
+                const storage = createNullableComponentStorage(
+                    id,
+                    data.originalId
+                );
                 COMPONENT_STORAGES.set(id, storage);
             }
         }

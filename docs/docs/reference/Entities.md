@@ -164,16 +164,16 @@ ent.get(Object3D.position.x); // Object3D does not have property "position"
 
 ## Updating Data
 
-> [!warning]
-> It can be tempting to do something like this:
->
-> ```ts
-> ent.get(Rect.pos.x)++;
-> ```
->
-> However, this will not effect the data that is held inside the entity, because the call to `ent.get` returns a `number`, which is [passed by value](https://www.geeksforgeeks.org/pass-by-value-and-pass-by-reference-in-javascript/#) in js, so any modifications will effect the "new" `number`, not the one that is stored.
->
-> If you are using external components, or have a non-primitive type in your schema, you can update sub-properties of those components using the assignment operator
+:::caution
+It can be tempting to do something like this:
+
+```ts
+ent.get(Rect.pos.x)++;
+```
+
+However, this will not effect the data that is held inside the entity, because the call to `ent.get` returns a `number`, which is [passed by value](https://www.geeksforgeeks.org/pass-by-value-and-pass-by-reference-in-javascript/#) in js, so any modifications will effect the "new" `number`, not the one that is stored.
+If you are using external components, or have a non-primitive type in your schema, you can update sub-properties of those components using the assignment operator
+:::
 
 There are 2 ways of updating component data that already exists on an entity: `Entity.prototype.update` and `Entity.prototype.getSlowRef`:
 

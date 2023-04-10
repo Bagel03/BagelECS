@@ -1,6 +1,6 @@
-import { isClass } from "../utils/class.js";
-import { MatchingTree, Tree } from "../utils/types.js";
-import { intoID } from "./entity.js";
+import { isClass } from "../utils/class";
+import { MatchingTree, Tree } from "../utils/types";
+import { intoID } from "./entity";
 import {
     Query,
     QueryModifier,
@@ -8,10 +8,10 @@ import {
     IntoQueryModifier,
     All,
     With,
-} from "./query.js";
-import { World } from "./world.js";
+} from "./query";
+import { World } from "./world";
 
-export class System<T extends Tree<Query>> {
+export class InternalSystem<T extends Tree<Query>> {
     /** @internal */
     public static nextSystemId: number = 0;
     public static id = this.nextSystemId++;
@@ -23,19 +23,19 @@ export class System<T extends Tree<Query>> {
     update() {}
 }
 
-export function CustomSystem<
+export function System<
     Into extends Tree<IntoQueryModifier>,
     T extends MatchingTree<Into, IntoQueryModifier, Query>
 >(queries: Into) {
     // Convert it from query modifier things to normal queries;
     const realQueries = queryModifierToQuery(queries) as T;
 
-    class CustomSystemClass extends System<T> {
+    class CustomSystemClass extends InternalSystem<T> {
         public readonly entities = realQueries;
     }
 
     return CustomSystemClass as typeof CustomSystemClass & {
-        new (world: World): System<T>;
+        new (world: World): InternalSystem<T>;
     };
 
     function intoQueryModifierToQueryModifier(

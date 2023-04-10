@@ -1,11 +1,16 @@
-import { flattenTree } from "../utils/tree.js";
-import { DeepWriteable, KeysOfObjWhere, Tree } from "../utils/types.js";
-import { Entity } from "./entity.js";
+import { flattenTree } from "../utils/tree";
+import {
+    DeepWriteable,
+    FixedLengthArray,
+    KeysOfObjWhere,
+    Tree,
+} from "../utils/types";
+import { Entity } from "./entity";
 import {
     registerEnumComponentStorage,
     registerNullableComponentStorage,
-} from "./storage.js";
-import { World } from "./world.js";
+} from "./storage";
+import { World } from "./world";
 
 declare global {
     interface Object {
@@ -46,6 +51,13 @@ export interface Type {
     custom<T>(type?: T): TypeId<T>;
     component<T>(component?: { schema: T }): TypeId<T>;
     enum<T extends string>(...options: T[]): TypeId<T>;
+
+    tuple<const A extends any[], T extends {[key in keyof A]: TypeId<A[key]>}>(...args: T): T;
+
+    vec<T, L extends number>(
+        type: TypeId<T>,
+        len: L
+    ): FixedLengthArray<TypeId<T>, L>;
 }
 
 export const Type: Type = {
@@ -75,6 +87,14 @@ export const Type: Type = {
 
     enum<T extends string>(...options: T[]): TypeId<T> {
         return registerEnumComponentStorage(...options) as TypeId<T>;
+    },
+
+    tuple<const A extends TypeId[]>(...args: A) {
+        return args as any;
+    },
+
+    vec<T, L extends number>(type: TypeId<T>, len: L) {
+        return new Array(len).fill(type) as FixedLengthArray<T, L>;
     },
 };
 
@@ -157,6 +177,7 @@ export function Component<
         }
 
         let obj = {} as any;
+
         for (const [key, val] of Object.entries(schema)) {
             obj[key] = getIdsRecursiveThroughSchema(val);
         }
@@ -191,7 +212,7 @@ export function Component<
 
 // Shout out to chatGPT holy shit that thing is good
 type UnwrapTypeSignatures<T> = T extends TypeId<infer U>
-    ? U extends Record<string, TypeId> // check if U is an object to handle nested objects
+    ? U extends Record<string, TypeId> | Array<any>// check if U is an object to handle nested objects
         ? {
               +readonly [K in keyof U]: U[K] extends TypeId<any>
                   ? U[K]

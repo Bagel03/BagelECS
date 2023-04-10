@@ -1,7 +1,7 @@
-import { Tree } from "../utils/types.js";
-import { Query } from "./query.js";
-import { System } from "./system.js";
-import { World } from "./world.js";
+import { Tree } from "../utils/types";
+import { Query } from "./query";
+import { InternalSystem } from "./system";
+import { World } from "./world";
 
 enum SystemType {
     LOCAL,
@@ -9,13 +9,13 @@ enum SystemType {
 }
 
 export class SystemManager {
-    public localSystems: System<any>[] = [];
+    public localSystems: InternalSystem<any>[] = [];
     public systemLocations: SystemType[] = [];
     public enabled = new Set<number>();
 
     constructor(private readonly world: World) {}
 
-    registerSystem(id: number, type: SystemType = SystemType.REMOTE) {
+    private registerSystem(id: number, type: SystemType = SystemType.REMOTE) {
         this.systemLocations[id] = type;
         this.enabled.add(id);
     }
@@ -28,7 +28,7 @@ export class SystemManager {
         this.enabled.delete(id);
     }
 
-    addSystem(system: System<any>) {
+    addSystem(system: InternalSystem<any>) {
         //@ts-expect-error
         const { id } = system.constructor;
         this.localSystems[id] = system;

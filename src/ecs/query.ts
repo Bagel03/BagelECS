@@ -1,6 +1,6 @@
-import { Archetype } from "./archetype.js";
-import { Entity, intoID } from "./entity.js";
-import { World } from "./world.js";
+import { Archetype } from "./archetype";
+import { Entity, intoID } from "./entity";
+import { World } from "./world";
 
 export const QUERY_TAG = Symbol("Query");
 

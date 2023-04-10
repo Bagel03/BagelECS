@@ -1,2 +1,4 @@
 dist
 docs/.obsidian
+node_modules
+bagelecs-*.tgz

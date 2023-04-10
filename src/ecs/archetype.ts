@@ -1,5 +1,5 @@
-import { Entity } from "./entity.js";
-import { World } from "./world.js";
+import { Entity } from "./entity";
+import { World } from "./world";
 
 export class Archetype {
     public readonly graph = {

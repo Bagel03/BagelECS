@@ -1,15 +1,15 @@
-import { Class } from "../utils/types.js";
-import { Entity, intoID } from "./entity.js";
-import "./entity.js";
-import "../utils/setFns.js";
-import { QueryManager, QueryModifier } from "./query.js";
-import { StorageManager } from "./storage.js";
-import { System } from "./system.js";
-import { SystemManager } from "./system_manager.js";
-import { WorkerManager } from "./worker_manager.js";
-import { ArchetypeManager } from "./archetype.js";
-import { ResourceManager } from "./resource.js";
-import { Logger } from "../utils/logger.js";
+import { Class } from "../utils/types";
+import { Entity, intoID } from "./entity";
+import "./entity";
+import "../utils/setFns";
+import { QueryManager, QueryModifier } from "./query";
+import { StorageManager } from "./storage";
+import { InternalSystem } from "./system";
+import { SystemManager } from "./system_manager";
+import { WorkerManager } from "./worker_manager";
+import { ArchetypeManager } from "./archetype";
+import { ResourceManager } from "./resource";
+import { Logger } from "../utils/logger";
 
 export class World {
     public static readonly GLOBAL_WORLD: World;
@@ -91,26 +91,26 @@ export class World {
         return this.queryManager.query(...modifiers);
     }
 
-    addSystem(system: Class<System<any>> | System<any>) {
-        if (!(system instanceof System)) system = new system(this);
+    addSystem(system: Class<InternalSystem<any>> | InternalSystem<any>) {
+        if (!(system instanceof InternalSystem)) system = new system(this);
 
         this.systemManager.addSystem(system);
     }
 
     async addRemoteSystem(url: string) {
         const id = await this.workerManager.loadWorkerSystem(url);
-        // this.systemManager.registerSystem(id);
+        this.systemManager.addRemoteSystem(id);
     }
 
-    enable(system: Class<System<any>>) {
+    enable(system: Class<InternalSystem<any>>) {
         this.systemManager.enableSystem((system as any).id);
     }
 
-    disable(system: Class<System<any>>) {
+    disable(system: Class<InternalSystem<any>>) {
         this.systemManager.disable((system as any).id);
     }
 
-    update(...systems: Class<System<any>>[]) {
+    update(...systems: Class<InternalSystem<any>>[]) {
         this.systemManager.update(
             ...systems.map((system: any) => system.id as number)
         );

@@ -1,5 +1,5 @@
-import { Component, Type } from "./component.js";
-import { Entity } from "./entity.js";
+import { Component, Type } from "./component";
+import { Entity } from "./entity";
 
 const Hierarchy = Component({
     firstChild: Type.nullable(Type.entity),
@@ -7,7 +7,7 @@ const Hierarchy = Component({
     parent: Type.nullable(Type.entity),
 });
 
-declare module "./entity.js" {
+declare module "./entity" {
     export interface EntityAPI {
         addChild(entity: Entity): void;
         removeChild(entity: Entity): void;

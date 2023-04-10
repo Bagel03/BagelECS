@@ -1,1 +1,1 @@
-export { registerRemoteSystem } from "../ecs/system.worker.js";
+export { registerRemoteSystem } from "../ecs/system.worker";

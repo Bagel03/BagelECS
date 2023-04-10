@@ -1,7 +1,7 @@
-import { Class } from "../utils/types.js";
-import { TypeId } from "./component.js";
-import { intoID } from "./entity.js";
-import { World } from "./world.js";
+import { Class } from "../utils/types";
+import { TypeId } from "./component";
+import { intoID } from "./entity";
+import { World } from "./world";
 
 export class ResourceManager {
     public readonly resources: Map<number, any> = new Map();

@@ -2,16 +2,16 @@ import {
     ComponentStorage,
     StorageManager,
     loadCustomComponentStorages,
-} from "./storage.js";
-import { System } from "./system.js";
-import { MessageType } from "./worker_manager.js";
-import { World } from "./world.js";
-import "./entity.js";
-import { QueryManager } from "./query.js";
-import { Logger } from "../utils/logger.js";
-import { Archetype } from "./archetype.js";
-import { setIdMap } from "./component.js";
-import { Class } from "../utils/types.js";
+} from "./storage";
+import { InternalSystem } from "./system";
+import { MessageType } from "./worker_manager";
+import { World } from "./world";
+import "./entity";
+import { QueryManager } from "./query";
+import { Logger } from "../utils/logger";
+import { Archetype } from "./archetype";
+import { setIdMap } from "./component";
+import { Class } from "../utils/types";
 
 Logger.log("Worker thread created");
 
@@ -44,10 +44,12 @@ const GLOBAL_WORLD = new World(0);
     };
 }
 
-let SYSTEM: System<any>;
-let SystemClass: Class<System<any>>;
+let SYSTEM: InternalSystem<any>;
+let SystemClass: Class<InternalSystem<any>> & { id: number };
 
-export function registerRemoteSystem(system: Class<System<any>>) {
+export function registerRemoteSystem(
+    system: Class<InternalSystem<any>> & { id: number }
+) {
     SystemClass = system;
 }
 
@@ -68,7 +70,11 @@ onmessage = async function workerSystemOnMessage(ev) {
             GLOBAL_WORLD.addSystem(SYSTEM);
             setIdMap(ev.data.components);
 
-            postMessage({ type: MessageType.init });
+            postMessage({
+                type: MessageType.init,
+                id: SystemClass.id,
+                name: SystemClass.name,
+            });
             break;
         }
 
@@ -92,6 +98,9 @@ onmessage = async function workerSystemOnMessage(ev) {
 
         case MessageType.update: {
             SYSTEM.update();
+            this.postMessage({
+                type: MessageType.update,
+            });
         }
     }
 };

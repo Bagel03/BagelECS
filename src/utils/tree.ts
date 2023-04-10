@@ -1,4 +1,4 @@
-import type { Tree } from "./types.js";
+import type { Tree } from "./types";
 
 /** @internal */
 export function flattenTree<C extends any, T extends Tree<C>, R = C>(
