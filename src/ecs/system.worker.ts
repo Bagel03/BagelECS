@@ -67,6 +67,8 @@ onmessage = async function workerSystemOnMessage(ev) {
 
             SYSTEM = new SystemClass(GLOBAL_WORLD);
 
+            SYSTEM.setStepSizeAndOffset(ev.data.stepSize, ev.data.offset);
+
             GLOBAL_WORLD.addSystem(SYSTEM);
             setIdMap(ev.data.components);
 

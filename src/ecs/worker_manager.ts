@@ -15,58 +15,90 @@ export enum MessageType {
     newArchetype,
 }
 
+// A object that represents multiple workers
+export class WorkerProxy {
+    constructor(public workers: Worker[]) {}
+
+    emit(data: any): void {
+        for (let i = this.workers.length - 1; i >= 0; i--) {
+            this.workers[i].postMessage(data);
+        }
+    }
+
+    emitAndWait<T>(
+        emitData: any,
+        waitFor: any,
+        indexProp?: string
+    ): Promise<T[]> {
+        const promises: Promise<any>[] = [];
+
+        for (let i = 0; i < this.workers.length; i++) {
+            if (indexProp) {
+                this.workers[i].postMessage({ ...emitData, [indexProp]: i });
+            } else {
+                this.workers[i].postMessage(emitData);
+            }
+
+            promises.push(awaitMessage(this.workers[i], waitFor));
+        }
+
+        return Promise.all(promises);
+    }
+}
+
 export class WorkerManager {
-    public readonly workers: Worker[] = [];
+    public readonly workers: WorkerProxy[] = [];
 
     constructor(private readonly world: World) {}
 
-    async loadWorkerSystem(url: string) {
-        Logger.log(`Loading remote system`);
-        const worker = new Worker(url, {
-            type: "module",
-        });
+    async loadWorkerSystem(url: string, numThreads: number = 1) {
+        Logger.log(`Loading remote system with ${numThreads} threads`);
 
-        worker.postMessage({
-            type: MessageType.init,
-            storage: this.world.storageManager.storages,
-            components: ID_MAP,
-            archetypeManager: this.world.archetypeManager,
-            resources: this.world.resourceManager.resources,
-            customStorages: CUSTOM_COMPONENT_STORAGES,
-        });
+        const workers: Worker[] = [];
 
-        // const {name, id} = await new Promise<{
-        //     name: string,
-        //     id: number
-        // }>((res, rej) => {
-        //     worker.onmessage = (ev) => {
-        //         if (ev.data.type == MessageType.init) res(ev.data);
-        //     };
-        // });
+        // const promises: Promise<{name: string, id: number}>[] = [];
+        for (let i = 0; i < numThreads; i++) {
+            workers.push(new Worker(url, { type: "module" }));
+        }
 
-        const { name, id } = await awaitMessage<{ name: string; id: number }>(
-            worker,
-            MessageType.init
+        const proxy = new WorkerProxy(workers);
+
+        const [{ name, id }] = await proxy.emitAndWait<{
+            name: string;
+            id: number;
+        }>(
+            {
+                type: MessageType.init,
+                storage: this.world.storageManager.storages,
+                components: ID_MAP,
+                archetypeManager: this.world.archetypeManager,
+                resources: this.world.resourceManager.resources,
+                customStorages: CUSTOM_COMPONENT_STORAGES,
+                stepSize: numThreads,
+            },
+            MessageType.init,
+            "offset"
         );
-        this.workers[id] = worker;
+
+        this.workers[id] = proxy;
         Logger.logOK(`Remote system ${name} (${id}) is ready`);
 
         return id;
     }
 
     async update(id: number) {
-        this.workers[id].postMessage({ type: MessageType.update });
+        this.workers[id].emit({ type: MessageType.update });
     }
 
     updateAll() {
         this.workers.forEach((worker) => {
-            worker.postMessage({ type: MessageType.update });
+            worker.emit({ type: MessageType.update });
         });
     }
 
     onNewArchetypeCreated(archetype: Archetype) {
         for (const worker of this.workers) {
-            worker.postMessage({
+            worker.emit({
                 type: MessageType.newArchetype,
                 archetype,
             });

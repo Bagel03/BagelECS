@@ -20,6 +20,21 @@ export class InternalSystem<T extends Tree<Query>> {
 
     constructor(public world: World) {}
 
+    /** @internal */
+    setStepSizeAndOffset(
+        stepSize: number,
+        offset: number,
+        obj: Tree<Query> = this.entities
+    ) {
+        if (obj instanceof Query) {
+            obj.setStepSizeAndOffset(stepSize, offset);
+        } else {
+            for (const val of Object.values(obj)) {
+                this.setStepSizeAndOffset(stepSize, offset, val);
+            }
+        }
+    }
+
     update() {}
 }
 
