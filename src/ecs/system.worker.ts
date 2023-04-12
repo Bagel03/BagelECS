@@ -13,7 +13,8 @@ import { Archetype } from "./archetype";
 import { setIdMap } from "./component";
 import { Class } from "../utils/types";
 
-Logger.log("Worker thread created");
+const logger = new Logger("Worker Thread");
+logger.log("Worker thread created");
 
 // Init world stuff
 const GLOBAL_WORLD = new World(0);
@@ -56,7 +57,7 @@ export function registerRemoteSystem(
 onmessage = async function workerSystemOnMessage(ev) {
     switch (ev.data.type) {
         case MessageType.init: {
-            Logger.log("Remote thread: Loading modules..");
+            logger.log("Remote thread: Loading modules..");
 
             loadCustomComponentStorages(ev.data.customStorages);
             GLOBAL_WORLD.storageManager.loadFromData(ev.data.storage);
@@ -85,7 +86,7 @@ onmessage = async function workerSystemOnMessage(ev) {
             GLOBAL_WORLD.storageManager.loadFromData(ev.data.storage);
             GLOBAL_WORLD.resourceManager.loadFromData(ev.data.resources);
 
-            Logger.logOK(`Remote system ${SYSTEM.constructor.name} Synced`);
+            logger.info(`Remote system ${SYSTEM.constructor.name} Synced`);
             break;
         }
 

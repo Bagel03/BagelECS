@@ -15,11 +15,16 @@ export enum MessageType {
     newArchetype,
 }
 
+const logger = new Logger("worker-manager");
+interface WorkerLike {
+    postMessage(data: any): void;
+}
+
 // A object that represents multiple workers
 export class WorkerProxy {
     constructor(public workers: Worker[]) {}
 
-    emit(data: any): void {
+    postMessage(data: any): void {
         for (let i = this.workers.length - 1; i >= 0; i--) {
             this.workers[i].postMessage(data);
         }
@@ -47,58 +52,87 @@ export class WorkerProxy {
 }
 
 export class WorkerManager {
-    public readonly workers: WorkerProxy[] = [];
+    public readonly workers: WorkerLike[] = [];
 
     constructor(private readonly world: World) {}
 
     async loadWorkerSystem(url: string, numThreads: number = 1) {
-        Logger.log(`Loading remote system with ${numThreads} threads`);
-
-        const workers: Worker[] = [];
-
-        // const promises: Promise<{name: string, id: number}>[] = [];
-        for (let i = 0; i < numThreads; i++) {
-            workers.push(new Worker(url, { type: "module" }));
-        }
-
-        const proxy = new WorkerProxy(workers);
-
-        const [{ name, id }] = await proxy.emitAndWait<{
+        let worker: Worker | WorkerProxy;
+        let systemData: {
             name: string;
             id: number;
-        }>(
-            {
+        };
+
+        if (numThreads === 1) {
+            logger.log(`Loading remote system...`);
+
+            worker = new Worker(url, { type: "module" });
+
+            worker.postMessage({
                 type: MessageType.init,
                 storage: this.world.storageManager.storages,
                 components: ID_MAP,
                 archetypeManager: this.world.archetypeManager,
                 resources: this.world.resourceManager.resources,
                 customStorages: CUSTOM_COMPONENT_STORAGES,
-                stepSize: numThreads,
-            },
-            MessageType.init,
-            "offset"
+                stepSize: 1,
+                offset: 0,
+            });
+
+            systemData = await awaitMessage<{ name: string; id: number }>(
+                worker,
+                MessageType.init
+            );
+        } else {
+            logger.log(`Loading remote system with ${numThreads} threads`);
+
+            worker = new WorkerProxy(
+                new Array(numThreads).map(
+                    (_) => new Worker(url, { type: "module" })
+                )
+            );
+
+            systemData = (
+                await worker.emitAndWait<{
+                    name: string;
+                    id: number;
+                }>(
+                    {
+                        type: MessageType.init,
+                        storage: this.world.storageManager.storages,
+                        components: ID_MAP,
+                        archetypeManager: this.world.archetypeManager,
+                        resources: this.world.resourceManager.resources,
+                        customStorages: CUSTOM_COMPONENT_STORAGES,
+                        stepSize: numThreads,
+                    },
+                    MessageType.init,
+                    "offset"
+                )
+            )[0];
+        }
+
+        this.workers[systemData.id] = worker;
+        logger.ok(
+            `Remote system ${systemData.name} (${systemData.id}) is ready`
         );
 
-        this.workers[id] = proxy;
-        Logger.logOK(`Remote system ${name} (${id}) is ready`);
-
-        return id;
+        return systemData.id;
     }
 
     async update(id: number) {
-        this.workers[id].emit({ type: MessageType.update });
+        this.workers[id].postMessage({ type: MessageType.update });
     }
 
     updateAll() {
         this.workers.forEach((worker) => {
-            worker.emit({ type: MessageType.update });
+            worker.postMessage({ type: MessageType.update });
         });
     }
 
     onNewArchetypeCreated(archetype: Archetype) {
         for (const worker of this.workers) {
-            worker.emit({
+            worker.postMessage({
                 type: MessageType.newArchetype,
                 archetype,
             });

@@ -11,6 +11,8 @@ import { ArchetypeManager } from "./archetype";
 import { ResourceManager } from "./resource";
 import { Logger } from "../utils/logger";
 
+const logger = new Logger("world");
+
 export class World {
     public static readonly GLOBAL_WORLD: World;
     private static nextComponentId = 0;
@@ -56,7 +58,7 @@ export class World {
     set maxEntities(v: number) {
         this.internalMaxEntities = v;
 
-        Logger.log("Resizing all storages to" + v);
+        logger.info("Resizing all storages to" + v);
         this.archetypeManager.resize(v);
         this.storageManager.resize(v);
     }
