@@ -11,8 +11,7 @@ System multithreading refers to running a whole system on its own thread. It's q
 -   First, create your system in a separate file, and register it as a remote system:
 
     ```ts title="system.ts"
-    import { System } from "bagelecs";
-    import { registerRemoteSystem } from "bagelecs/remote";
+    import { registerRemoteSystem, System } from "bagelecs/remote";
 
     import { Pos } from "./components/position";
 
@@ -30,7 +29,7 @@ System multithreading refers to running a whole system on its own thread. It's q
     ```
 
     :::caution
-    Notice that `registerRemoteSystem` is imported from `bagelecs/remote`, not from the base `bagelecs` pacakge.
+    Notice that `registerRemoteSystem` and `System` are imported from `bagelecs/remote`, not from the base `bagelecs` pacakge.
     :::
 
 -   Now use `World.prototype.addRemoteSystem` and pass in the path to your system file:
@@ -38,12 +37,12 @@ System multithreading refers to running a whole system on its own thread. It's q
     ```ts title="main.ts"
     const world = new World(100);
 
-    world.addRemoteSystem("./system.ts");
+    world.addRemoteSystem("./system.js");
     ```
 
     :::caution
     Make sure that the server you are using can give bagelecs a full path to your system file. This is the source of almost all issues with starting a remote system,
-    as in many environments bagelecs will look for `./system.ts` inside of `node_modules/bagelecs`, which will of course fail.
+    as in many environments bagelecs will look for `./system.js` inside of `node_modules/bagelecs`, which will of course fail. Also note the `.js` extension, as that is what will be imported at runtime, even if it doesn't exist at compile time.
     :::
     You should see a message in the console verifying that your system is working.
 
@@ -60,7 +59,17 @@ world.update(MySystem);
 ## SIMD Multithreading
 
 SIMD (_single instruction multiple data_) refers to running ths same instruction (function) over lots of data (in an ECS's case different entities and their components).
-This would mean running a single system in multiple threads, and evenly distributing the system's targeted entities among the threads. **Currently, BagelECS does not support running the same system in multiple threads**, however it is being investigated.
+This would mean running a single system in multiple threads, and evenly distributing the system's targeted entities among the threads. BagelECS allows you to accomplish this by providing a second argument to `World.prototype.addRemoteSystem`, `numThreads`. BagelECS will then load your system on that many worker threads, and distribute entities evenly across them:
+
+```ts title="main.ts"
+const world = new World(100);
+
+world.addRemoteSystem("./system.js", 4);
+```
+
+:::tip
+No change to your system (and its containing file) are needed, just provide the extra parameter in your base thread.
+:::
 
 ## Limitations
 
@@ -77,3 +86,7 @@ Similar to resources, any component property that is of type `Type.any` is not a
 ### Adding and Removing Entities and Components
 
 Currently, worker systems can only edit data that already exists. BagelECS does not allow adding or removing entities from a world, or adding or removing components from an entity.
+
+```
+
+```
