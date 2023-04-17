@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "esbuild bundle=./src/exports/index.ts bundle.worker=./src/exports/worker.ts --bundle --outdir=./dist --sourcemap --format=esm --minify",
+    "build.dev": "esbuild bundle=./src/exports/index.ts bundle.worker=./src/exports/worker.ts --chunk-names=shared --bundle --splitting --outdir=./dist --sourcemap --format=esm --minify",
     "types": "node scripts/types.js"
   },
   "exports": {

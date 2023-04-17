@@ -1,23 +1,28 @@
-import {
-    ComponentStorage,
-    StorageManager,
-    loadCustomComponentStorages,
-} from "./storage";
-import { InternalSystem } from "./system";
-import { MessageType } from "./worker_manager";
-import { World } from "./world";
-import "./entity";
-import { QueryManager } from "./query";
 import { Logger } from "../utils/logger";
-import { Archetype } from "./archetype";
-import { setIdMap } from "./component";
-import { Class } from "../utils/types";
 
 const logger = new Logger("Worker Thread");
-logger.log("Worker thread created");
+logger.groupCollapsed("Worker thread created");
+
+import { StorageManager, loadCustomComponentStorages } from "./storage";
+import { InternalSystem } from "./system";
+import { MessageType } from "./worker_manager";
+import { World, disablePolyfills } from "./world";
+import { Archetype } from "./archetype";
+import { loadComponentMethods, setIdMap } from "./component";
+import { Class } from "../utils/types";
+import { loadEntityMethods } from "./entity";
+import { loadSetMethods } from "../exports";
+
+// We want to log these ourselves
+disablePolyfills();
+logger.groupCollapsed("Load worker thread methods");
+loadEntityMethods();
+loadSetMethods();
+loadComponentMethods();
+logger.groupEnd();
 
 // Init world stuff
-const GLOBAL_WORLD = new World(0);
+const GLOBAL_WORLD = new World(100);
 
 // Init entity /component stuff (Disable stuff)
 {
@@ -45,6 +50,7 @@ const GLOBAL_WORLD = new World(0);
     };
 }
 
+logger.groupEnd();
 let SYSTEM: InternalSystem<any>;
 let SystemClass: Class<InternalSystem<any>> & { id: number };
 
@@ -57,7 +63,7 @@ export function registerRemoteSystem(
 onmessage = async function workerSystemOnMessage(ev) {
     switch (ev.data.type) {
         case MessageType.init: {
-            logger.log("Remote thread: Loading modules..");
+            logger.groupCollapsed("Initializing worker thread");
 
             loadCustomComponentStorages(ev.data.customStorages);
             GLOBAL_WORLD.storageManager.loadFromData(ev.data.storage);
@@ -78,15 +84,35 @@ onmessage = async function workerSystemOnMessage(ev) {
                 id: SystemClass.id,
                 name: SystemClass.name,
             });
+
+            logger.groupEnd();
+
+            startUpdateLoop(ev.data.triggerArray, ev.data.offset);
+
+            logger.logOk(
+                "System",
+                SystemClass.name,
+                "(",
+                SystemClass.id,
+                ") is ready and waiting for updates"
+            );
             break;
         }
 
         case MessageType.sync: {
+            logger.groupCollapsed("Syncing from data dump", ev.data);
             loadCustomComponentStorages(ev.data.customStorages);
             GLOBAL_WORLD.storageManager.loadFromData(ev.data.storage);
             GLOBAL_WORLD.resourceManager.loadFromData(ev.data.resources);
-
-            logger.info(`Remote system ${SYSTEM.constructor.name} Synced`);
+            logger.logOk(
+                `System`,
+                SystemClass.name,
+                "(",
+                SystemClass.id,
+                ")",
+                `synced`
+            );
+            logger.groupCollapsed();
             break;
         }
 
@@ -95,7 +121,6 @@ onmessage = async function workerSystemOnMessage(ev) {
                 Archetype.prototype,
                 Object.getOwnPropertyDescriptors(ev.data.archetype)
             );
-            console.log("Generated new archetype");
             GLOBAL_WORLD.queryManager.onNewArchetypeCreated(archetype);
         }
 
@@ -107,3 +132,15 @@ onmessage = async function workerSystemOnMessage(ev) {
         }
     }
 };
+
+async function startUpdateLoop(arrayBuffer: Int32Array, index: number) {
+    while (true) {
+        // While this is 0 we will not update
+        await Atomics.waitAsync(arrayBuffer, index, 0).value;
+
+        SYSTEM.update();
+
+        Atomics.store(arrayBuffer, index, 0);
+        Atomics.notify(arrayBuffer, index);
+    }
+}

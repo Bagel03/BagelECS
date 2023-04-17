@@ -1,58 +1,104 @@
-function getColorFromTag(tag: string): string {
-    let seed = 0;
-    for (let i = 0; i < tag.length; i++)
-        seed = tag.charCodeAt(i) + ((seed << 5) - seed);
-
-    return `hsl(${seed % 360},70%,60%)`;
-}
+const IS_WORKER = typeof importScripts == "function";
 
 export class Logger {
-    private static readonly tagPadding: number = 30;
+    public context: string;
+    private color: string;
 
-    constructor(
-        private readonly tag: string,
-        private readonly color: string = getColorFromTag(tag)
-    ) {}
+    constructor(...context: string[]) {
+        this.context =
+            typeof context === "string" ? context : context.join(" > ");
 
-    group(...info: any) {
-        console.groupCollapsed(...this.getEmojiStyleArr(" "), ...info);
+        this.color = `hsl(${
+            JSON.stringify(context)
+                .split("")
+                .reduce(
+                    (seed, val) => val.charCodeAt(0) + ((seed << 5) - seed),
+                    0
+                ) % 360
+        }, 70%, 60%)`;
+    }
+
+    group(...data: any[]) {
+        console.group(
+            ...this.generateContextPrefix("⠀⠀", "I", "bgWhite", data)
+        );
+    }
+
+    groupCollapsed(...data: any[]) {
+        console.groupCollapsed(
+            ...this.generateContextPrefix("⠀⠀", "I", "bgWhite", data)
+        );
     }
 
     groupEnd() {
         console.groupEnd();
     }
 
-    log(...info: any) {
-        console.log(...this.getEmojiStyleArr(" "), ...info);
+    log(...data: any[]) {
+        this.info(...data);
     }
 
-    info(...info: any) {
-        console.info(...this.getEmojiStyleArr("💬"), ...info);
+    logOk(...data: any[]) {
+        console.log(...this.generateContextPrefix("✔️", "O", "bgGreen", data));
     }
 
-    ok(...info: any) {
-        console.log(...this.getEmojiStyleArr("✅"), ...info);
+    debug(...data: any[]) {
+        console.log(...this.generateContextPrefix("⠀⠀", "D", "bgGray", data));
     }
 
-    warn(...info: any) {
-        console.warn(...this.getEmojiStyleArr("⚠"), ...info);
+    info(...data: any[]) {
+        console.info(...this.generateContextPrefix("⠀⠀", "I", "bgWhite", data));
     }
 
-    error(...info: any) {
-        console.error(...this.getEmojiStyleArr("❌"), ...info);
+    warn(...data: any[]) {
+        console.warn(
+            ...this.generateContextPrefix("⚠️", "W", "bgYellow", data)
+        );
     }
 
-    getEmojiStyleArr(emoji: string) {
+    error(...data: any[]) {
+        console.error(...this.generateContextPrefix("❌", "!", "bgRed", data));
+    }
+
+    generateContextPrefix(
+        emoji: string,
+        type: string,
+        bgColor: string,
+        data: any[]
+    ) {
+        let col = this.color,
+            extra = "";
+
+        switch (type) {
+            case "O":
+                col = "lime";
+                break;
+            case "!":
+                col = "red";
+                break;
+            case "W":
+                col = "yellow";
+                break;
+            case "D":
+                col = "#888";
+                extra = data.join(" ");
+                data = [];
+                break;
+            case "I":
+                col = this.color;
+                break;
+        }
+
+        if (IS_WORKER) {
+            emoji = "⚙️";
+        }
+
         return [
-            `%c ${emoji}  %c ${this.tag.padEnd(Logger.tagPadding, " ")} `,
-            `background: ${
-                this.color
-                // this.color ? this.color : "#44484a"
-            }; color: #aaa; padding: 0 5px; border-top-left-radius: 4px; border-bottom-left-radius: 5px;`,
-            `background: ${
-                this.color
-                // this.color ? this.color + "7f" : "#333438"
-            }; color: #aaa; border-top-right-radius: 4px; border-bottom-right-radius: 4px;`,
+            `%c ${emoji} %c ` + this.context.padEnd(30, " ") + " %c " + extra,
+            `background: ${col}; color: #fff; padding: 2px 5px 0 5px;  border-top-left-radius: 3px; border-bottom-left-radius: 3px;`,
+            `background: #333438; color: ${col}; border-top-right-radius: 3px; border-bottom-right-radius: 3px; padding-top: 2px`,
+            "color: gray",
+            ...data,
         ];
     }
 }

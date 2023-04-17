@@ -1,10 +1,7 @@
 import { Logger } from "../utils/logger";
-import type { Tree } from "../utils/types";
 import { Archetype } from "./archetype";
 import { ID_MAP } from "./component";
-import { Query } from "./query";
 import { CUSTOM_COMPONENT_STORAGES } from "./storage";
-import { System, InternalSystem } from "./system";
 import { World } from "./world";
 import { awaitMessage } from "../utils/await_worker";
 
@@ -15,14 +12,16 @@ export enum MessageType {
     newArchetype,
 }
 
-const logger = new Logger("worker-manager");
+const logger = new Logger("Worker Manager");
 interface WorkerLike {
     postMessage(data: any): void;
 }
 
 // A object that represents multiple workers
 export class WorkerProxy {
-    constructor(public workers: Worker[]) {}
+    public workers: Worker[] = [];
+
+    constructor(public url: string, public numThreads: number) {}
 
     postMessage(data: any): void {
         for (let i = this.workers.length - 1; i >= 0; i--) {
@@ -30,31 +29,40 @@ export class WorkerProxy {
         }
     }
 
-    emitAndWait<T>(
+    async initAndEmitData<T>(
         emitData: any,
         waitFor: any,
         indexProp?: string
     ): Promise<T[]> {
-        const promises: Promise<any>[] = [];
+        const data = [];
 
-        for (let i = 0; i < this.workers.length; i++) {
+        for (let i = 0; i < this.numThreads; i++) {
+            this.workers.push(new Worker(this.url, { type: "module" }));
+
             if (indexProp) {
                 this.workers[i].postMessage({ ...emitData, [indexProp]: i });
             } else {
                 this.workers[i].postMessage(emitData);
             }
-
-            promises.push(awaitMessage(this.workers[i], waitFor));
+            data[i] = await awaitMessage(this.workers[i], waitFor);
         }
 
-        return Promise.all(promises);
+        return data;
     }
 }
 
 export class WorkerManager {
     public readonly workers: WorkerLike[] = [];
+    private readonly triggerArrays: Int32Array[] = [];
 
     constructor(private readonly world: World) {}
+
+    async loadWorkerSystem(url: string): Promise<number>;
+    async loadWorkerSystem(
+        url: string,
+        numThreads?: number,
+        startInOrder?: boolean
+    ): Promise<number>;
 
     async loadWorkerSystem(url: string, numThreads: number = 1) {
         let worker: Worker | WorkerProxy;
@@ -62,6 +70,10 @@ export class WorkerManager {
             name: string;
             id: number;
         };
+
+        const triggerArray = new Int32Array(
+            new SharedArrayBuffer(numThreads * Int32Array.BYTES_PER_ELEMENT)
+        );
 
         if (numThreads === 1) {
             logger.log(`Loading remote system...`);
@@ -77,6 +89,7 @@ export class WorkerManager {
                 customStorages: CUSTOM_COMPONENT_STORAGES,
                 stepSize: 1,
                 offset: 0,
+                triggerArray,
             });
 
             systemData = await awaitMessage<{ name: string; id: number }>(
@@ -86,14 +99,10 @@ export class WorkerManager {
         } else {
             logger.log(`Loading remote system with ${numThreads} threads`);
 
-            worker = new WorkerProxy(
-                new Array(numThreads).map(
-                    (_) => new Worker(url, { type: "module" })
-                )
-            );
+            worker = new WorkerProxy(url, numThreads);
 
             systemData = (
-                await worker.emitAndWait<{
+                await worker.initAndEmitData<{
                     name: string;
                     id: number;
                 }>(
@@ -105,6 +114,7 @@ export class WorkerManager {
                         resources: this.world.resourceManager.resources,
                         customStorages: CUSTOM_COMPONENT_STORAGES,
                         stepSize: numThreads,
+                        triggerArray,
                     },
                     MessageType.init,
                     "offset"
@@ -113,21 +123,37 @@ export class WorkerManager {
         }
 
         this.workers[systemData.id] = worker;
-        logger.ok(
+        this.triggerArrays[systemData.id] = triggerArray;
+        logger.logOk(
             `Remote system ${systemData.name} (${systemData.id}) is ready`
         );
 
         return systemData.id;
     }
 
-    async update(id: number) {
-        this.workers[id].postMessage({ type: MessageType.update });
+    update(id: number): Promise<any> {
+        const triggerArray = this.triggerArrays[id];
+        if (triggerArray.length === 1) {
+            // Tell them to go
+            Atomics.store(triggerArray, 0, 1);
+            Atomics.notify(triggerArray, 0);
+
+            // Wait for it to respond
+            return Atomics.waitAsync(triggerArray, 0, 1).value as Promise<any>;
+        }
+
+        const promises = [];
+        for (let i = triggerArray.length - 1; i >= 0; i--) {
+            Atomics.store(triggerArray, i, 1);
+            Atomics.notify(triggerArray, i);
+            promises.push(Atomics.waitAsync(triggerArray, i, 1).value);
+        }
+
+        return Promise.all(promises);
     }
 
     updateAll() {
-        this.workers.forEach((worker) => {
-            worker.postMessage({ type: MessageType.update });
-        });
+        this.triggerArrays.forEach((arr, idx) => this.update(idx));
     }
 
     onNewArchetypeCreated(archetype: Archetype) {

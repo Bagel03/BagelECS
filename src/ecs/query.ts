@@ -1,15 +1,12 @@
 import { Archetype } from "./archetype";
 import { Entity, intoID } from "./entity";
-import { World } from "./world";
-
-export const QUERY_TAG = Symbol("Query");
+import type { World } from "./world";
 
 export type QueryModifier = (components: Set<number>) => boolean;
 export type IntoQueryModifier = intoID | intoID[] | QueryModifier;
 
 export class Query {
     private targetedArchetypes: Archetype[] = [];
-    public readonly [QUERY_TAG] = true as const;
 
     // Used for skipping entities when multithreading
     private offset: number = 0;

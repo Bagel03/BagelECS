@@ -6,39 +6,38 @@ declare global {
         filter(f: (arg: T) => boolean): Set<T>;
     }
 }
+export function loadSetMethods() {
+    Set.prototype.clone = function () {
+        return new Set(this);
+    };
 
-Set.prototype.clone = function () {
-    return new Set(this);
-};
+    Set.prototype.concat = function (...others) {
+        const newSet = this.clone();
 
-Set.prototype.concat = function (...others) {
-    const newSet = this.clone();
-
-    for (const other of others) {
-        if (other instanceof Set) {
-            other.forEach((s) => newSet.add(s));
-        } else {
-            newSet.add(other);
+        for (const other of others) {
+            if (other instanceof Set) {
+                other.forEach((s) => newSet.add(s));
+            } else {
+                newSet.add(other);
+            }
         }
-    }
 
-    return newSet;
-};
+        return newSet;
+    };
 
-Set.prototype.every = function (fn) {
-    for (const v in this) {
-        if (!fn(v)) return false;
-    }
-    return true;
-};
+    Set.prototype.every = function (fn) {
+        for (const v in this) {
+            if (!fn(v)) return false;
+        }
+        return true;
+    };
 
-Set.prototype.filter = function (fn) {
-    const newSet = new Set();
+    Set.prototype.filter = function (fn) {
+        const newSet = new Set();
 
-    for (const v in this) {
-        if (fn(v)) newSet.add(v);
-    }
-    return newSet;
-};
-
-export {};
+        for (const v in this) {
+            if (fn(v)) newSet.add(v);
+        }
+        return newSet;
+    };
+}

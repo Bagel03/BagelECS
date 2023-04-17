@@ -1,6 +1,6 @@
 export * from "../ecs/component";
 export * from "../ecs/entity";
-export * from "../ecs/hierarchy";
+// export * from "../ecs/hierarchy";
 export * from "../ecs/query";
 export * from "../ecs/relationships";
 export * from "../ecs/resource";

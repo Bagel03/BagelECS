@@ -1,15 +1,7 @@
 import { isClass } from "../utils/class";
 import { MatchingTree, Tree } from "../utils/types";
-import { intoID } from "./entity";
-import {
-    Query,
-    QueryModifier,
-    QUERY_TAG,
-    IntoQueryModifier,
-    All,
-    With,
-} from "./query";
-import { World } from "./world";
+import { Query, QueryModifier, IntoQueryModifier, All, With } from "./query";
+import type { World } from "./world";
 
 export class InternalSystem<T extends Tree<Query>> {
     /** @internal */
