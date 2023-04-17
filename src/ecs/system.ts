@@ -1,15 +1,7 @@
 import { isClass } from "../utils/class";
 import { MatchingTree, Tree } from "../utils/types";
-import { intoID } from "./entity";
-import {
-    Query,
-    QueryModifier,
-    QUERY_TAG,
-    IntoQueryModifier,
-    All,
-    With,
-} from "./query";
-import { World } from "./world";
+import { Query, QueryModifier, IntoQueryModifier, All, With } from "./query";
+import type { World } from "./world";
 
 export class InternalSystem<T extends Tree<Query>> {
     /** @internal */
@@ -19,6 +11,21 @@ export class InternalSystem<T extends Tree<Query>> {
     public declare readonly entities: T;
 
     constructor(public world: World) {}
+
+    /** @internal */
+    setStepSizeAndOffset(
+        stepSize: number,
+        offset: number,
+        obj: Tree<Query> = this.entities
+    ) {
+        if (obj instanceof Query) {
+            obj.setStepSizeAndOffset(stepSize, offset);
+        } else {
+            for (const val of Object.values(obj)) {
+                this.setStepSizeAndOffset(stepSize, offset, val);
+            }
+        }
+    }
 
     update() {}
 }

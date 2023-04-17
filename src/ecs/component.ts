@@ -1,3 +1,4 @@
+import { Logger } from "../utils/logger";
 import { flattenTree } from "../utils/tree";
 import {
     DeepWriteable,
@@ -5,17 +6,22 @@ import {
     KeysOfObjWhere,
     Tree,
 } from "../utils/types";
-import { Entity } from "./entity";
+import type { Entity } from "./entity";
 import {
     registerEnumComponentStorage,
     registerNullableComponentStorage,
 } from "./storage";
-import { World } from "./world";
 
+const logger = new Logger("Components")
 declare global {
     interface Object {
         getId(): number;
     }
+}
+
+let nextComponentId: number = 0;
+export function getUniqueComponentId() {
+    return nextComponentId++;
 }
 
 export const ID_MAP: Record<string, number> = {};
@@ -26,12 +32,17 @@ export const setIdMap = (map: Record<string, number>): void => {
 
     for (const [key, value] of Object.entries(map)) {
         ID_MAP[key] = value;
+        nextComponentId = Math.max(nextComponentId, value);
     }
 };
 
-Object.prototype.getId = function () {
-    return (ID_MAP[this.constructor.name] ??= World.getUniqueComponentId());
-};
+export function loadComponentMethods() {
+    Object.prototype.getId = function () {
+        return (ID_MAP[this.constructor.name] ??= getUniqueComponentId());
+    };
+    
+    logger.logOk("Patched Object prototype, 3rd party external components are now available");
+}
 
 export type TypeId<T = any> = number & {
     _type: T;
@@ -114,7 +125,7 @@ export function Component<
             flattenTree(data, this.cachedValues);
         }
 
-        static readonly id = World.getUniqueComponentId();
+        static readonly id = getUniqueComponentId();
 
         static getId() {
             return CustomFastComponent.id;
@@ -166,7 +177,7 @@ export function Component<
 
     function getIdsRecursiveThroughSchema(schema: Tree<TypeId>) {
         if (typeof schema == "number") {
-            const propId = World.getUniqueComponentId();
+            const propId = getUniqueComponentId();
             ID_MAP[
                 CustomFastComponent.id +
                     "-prop" +
@@ -212,7 +223,7 @@ export function Component<
 
 // Shout out to chatGPT holy shit that thing is good
 type UnwrapTypeSignatures<T> = T extends TypeId<infer U>
-    ? U extends Record<string, TypeId> | Array<any>// check if U is an object to handle nested objects
+    ? U extends Record<string, TypeId>// check if U is an object to handle nested objects
         ? {
               +readonly [K in keyof U]: U[K] extends TypeId<any>
                   ? U[K]

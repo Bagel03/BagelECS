@@ -1,6 +1,8 @@
 import { Entity } from "./entity";
 import { World } from "./world";
+import { Logger } from "../utils/logger";
 
+const logger = new Logger("Archetype Manager");
 export class Archetype {
     public readonly graph = {
         added: new Map<number, Archetype>(),
@@ -72,6 +74,8 @@ export class ArchetypeManager {
     }
 
     loadFromData(data: any): void {
+        logger.log("Loading from data dump:", data);
+
         //@ts-ignore
         this.defaultArchetype = Object.create(
             Archetype.prototype,
@@ -92,13 +96,27 @@ export class ArchetypeManager {
         this.entityArchetypes = data.entityArchetypes;
     }
 
+    createNewArchetype(components: Set<number>) {
+        logger.log("Creating new archetype for components:", components);
+
+        const newArchetype = new Archetype(
+            this.nextArchetypeId++,
+            components,
+            this.world.maxEntities
+        );
+        this.world.queryManager.onNewArchetypeCreated(newArchetype);
+        this.world.workerManager.onNewArchetypeCreated(newArchetype);
+        this.archetypes.set(newArchetype.id, newArchetype);
+
+        return newArchetype;
+    }
+
     addEntity(entity: Entity) {
         this.entityArchetypes[entity] = 0;
         this.defaultArchetype.addEntity(entity);
     }
 
     entityAddComponent(entity: Entity, component: number) {
-        // debugger;
         // TODO: Make this faster
         const firstArchetype = this.archetypes.get(
             this.entityArchetypes[entity]
@@ -133,14 +151,9 @@ export class ArchetypeManager {
 
             if (!firstArchetype.graph.added.has(component)) {
                 // If we get here, we need to create a new archetype
-                const newArchetype = new Archetype(
-                    this.nextArchetypeId++,
-                    firstArchetype.components.concat(component),
-                    this.world.maxEntities
+                const newArchetype = this.createNewArchetype(
+                    firstArchetype.components.concat(component)
                 );
-                this.world.queryManager.onNewArchetypeCreated(newArchetype);
-                this.world.workerManager.onNewArchetypeCreated(newArchetype);
-                this.archetypes.set(newArchetype.id, newArchetype);
                 firstArchetype.graph.added.set(component, newArchetype);
             }
         }
@@ -183,14 +196,9 @@ export class ArchetypeManager {
             }
 
             if (!firstArchetype.graph.removed.has(component)) {
-                const newArchetype = new Archetype(
-                    this.nextArchetypeId++,
-                    firstArchetype.components.filter((x) => x !== component),
-                    5
+                const newArchetype = this.createNewArchetype(
+                    firstArchetype.components.filter((x) => x !== component)
                 );
-                this.world.queryManager.onNewArchetypeCreated(newArchetype);
-                this.world.workerManager.onNewArchetypeCreated(newArchetype);
-                this.archetypes.set(newArchetype.id, newArchetype);
                 firstArchetype.graph.removed.set(component, newArchetype);
             }
         }

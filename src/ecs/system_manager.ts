@@ -57,12 +57,16 @@ export class SystemManager {
         //@ts-ignore
         if (systems.length == 0) systems = this.enabled;
 
+        const promises = [];
+
         for (const systemId of systems) {
             if (this.systemLocations[systemId] == SystemType.REMOTE) {
-                this.world.workerManager.update(systemId);
+                promises.push(this.world.workerManager.update(systemId));
             } else {
                 this.localSystems[systemId].update();
             }
         }
+
+        return Promise.all(promises) as unknown as Promise<void>;
     }
 }

@@ -1,77 +1,77 @@
-import { Component, Type } from "./component";
-import { Entity } from "./entity";
+// import { Component, Type } from "./component";
+// import { Entity } from "./entity";
 
-const Hierarchy = Component({
-    firstChild: Type.nullable(Type.entity),
-    nextSibling: Type.nullable(Type.entity),
-    parent: Type.nullable(Type.entity),
-});
+// const Hierarchy = Component({
+//     firstChild: Type.nullable(Type.entity),
+//     nextSibling: Type.nullable(Type.entity),
+//     parent: Type.nullable(Type.entity),
+// });
 
-declare module "./entity" {
-    export interface EntityAPI {
-        addChild(entity: Entity): void;
-        removeChild(entity: Entity): void;
-        children(): IterableIterator<Entity>;
-    }
-}
+// declare module "./entity" {
+//     export interface EntityAPI {
+//         addChild(entity: Entity): void;
+//         removeChild(entity: Entity): void;
+//         children(): IterableIterator<Entity>;
+//     }
+// }
 
-//@ts-expect-error
-Number.prototype.addChild = function (this: Entity, entity: Entity): void {
-    let myHierarchy = this.get(Hierarchy);
+// //@ts-expect-error
+// Number.prototype.addChild = function (this: Entity, entity: Entity): void {
+//     let myHierarchy = this.get(Hierarchy);
 
-    if (!myHierarchy) {
-        myHierarchy = new Hierarchy({
-            firstChild: null,
-            nextSibling: null,
-            parent: null,
-        });
-        this.add(myHierarchy);
-    }
+//     if (!myHierarchy) {
+//         myHierarchy = new Hierarchy({
+//             firstChild: null,
+//             nextSibling: null,
+//             parent: null,
+//         });
+//         this.add(myHierarchy);
+//     }
 
-    let oldFirstChild = this.get(Hierarchy.firstChild);
-    this.update(Hierarchy.firstChild, entity);
+//     let oldFirstChild = this.get(Hierarchy.firstChild);
+//     this.update(Hierarchy.firstChild, entity);
 
-    if (entity.has(Hierarchy)) {
-        // TODO;
-    } else {
-        entity.add(
-            new Hierarchy({
-                parent: this,
-                firstChild: null,
-                nextSibling: oldFirstChild,
-            })
-        );
-    }
-};
+//     if (entity.has(Hierarchy)) {
+//         // TODO;
+//     } else {
+//         entity.add(
+//             new Hierarchy({
+//                 parent: this,
+//                 firstChild: null,
+//                 nextSibling: oldFirstChild,
+//             })
+//         );
+//     }
+// };
 
-//@ts-ignore
-Number.prototype.removeChild = function (this: Entity, entity: Entity) {
-    if (this.get(Hierarchy.firstChild) == entity) {
-        this.update(Hierarchy.firstChild, entity.get(Hierarchy.nextSibling));
-        return;
-    }
+// //@ts-ignore
+// Number.prototype.removeChild = function (this: Entity, entity: Entity) {
+//     if (this.get(Hierarchy.firstChild) == entity) {
+//         this.update(Hierarchy.firstChild, entity.get(Hierarchy.nextSibling));
+//         return;
+//     }
 
-    let lastChild = this.get(Hierarchy.firstChild)!;
-    let child = lastChild.get(Hierarchy.nextSibling);
-    while (child) {
-        if (child == entity) {
-            lastChild.update(
-                Hierarchy.nextSibling,
-                child.get(Hierarchy.nextSibling)
-            );
-            break;
-        }
-    }
-};
+//     let lastChild = this.get(Hierarchy.firstChild)!;
+//     let child = lastChild.get(Hierarchy.nextSibling);
+//     while (child) {
+//         if (child == entity) {
+//             lastChild.update(
+//                 Hierarchy.nextSibling,
+//                 child.get(Hierarchy.nextSibling)
+//             );
+//             break;
+//         }
+//     }
+// };
 
-//@ts-expect-error
-Number.prototype.children = function* (this: Entity) {
-    if (!this.has(Hierarchy) || this.get(Hierarchy.firstChild) === null) return;
+// //@ts-expect-error
+// Number.prototype.children = function* (this: Entity) {
+//     if (!this.has(Hierarchy) || this.get(Hierarchy.firstChild) === null) return;
 
-    let child = this.get(Hierarchy.firstChild)!;
-    yield child;
+//     let child = this.get(Hierarchy.firstChild)!;
+//     yield child;
 
-    while ((child = child.get(Hierarchy.nextSibling)!)) {
-        yield child;
-    }
-};
+//     while ((child = child.get(Hierarchy.nextSibling)!)) {
+//         yield child;
+//     }
+// };

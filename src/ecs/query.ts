@@ -1,15 +1,21 @@
 import { Archetype } from "./archetype";
 import { Entity, intoID } from "./entity";
-import { World } from "./world";
-
-export const QUERY_TAG = Symbol("Query");
+import type { World } from "./world";
 
 export type QueryModifier = (components: Set<number>) => boolean;
 export type IntoQueryModifier = intoID | intoID[] | QueryModifier;
 
 export class Query {
     private targetedArchetypes: Archetype[] = [];
-    public readonly [QUERY_TAG] = true as const;
+
+    // Used for skipping entities when multithreading
+    private offset: number = 0;
+    private stepSize: number = 1;
+
+    setStepSizeAndOffset(stepSize: number, offset: number) {
+        this.stepSize = stepSize;
+        this.offset = offset;
+    }
 
     constructor(public componentTester: QueryModifier) {}
 
@@ -18,17 +24,12 @@ export class Query {
     }
 
     *[Symbol.iterator](): IterableIterator<Entity> {
-        // for (let i = 0; i < this.targetedArchetypes.length; i++) {
-        //     for (
-        //         let j = 1;
-        //         j < this.targetedArchetypes[i].entities[0] + 1;
-        //         j++
-        //     ) {
-        //         yield this.targetedArchetypes[i].entities[j] as Entity;
-        //     }
-        // }
         for (let i = this.targetedArchetypes.length - 1; i >= 0; i--) {
-            for (let j = this.targetedArchetypes[i].entities[0]; j > 0; j--) {
+            for (
+                let j = this.targetedArchetypes[i].entities[0] - this.offset;
+                j > 0;
+                j -= this.stepSize
+            ) {
                 yield this.targetedArchetypes[i].entities[j] as Entity;
             }
         }
@@ -36,7 +37,11 @@ export class Query {
 
     forEach(fn: (entity: Entity) => void) {
         for (let i = this.targetedArchetypes.length - 1; i >= 0; i--) {
-            for (let j = this.targetedArchetypes[i].entities[0]; j > 0; j--) {
+            for (
+                let j = this.targetedArchetypes[i].entities[0] - this.offset;
+                j > 0;
+                j -= this.stepSize
+            ) {
                 fn(this.targetedArchetypes[i].entities[j] as Entity);
             }
         }

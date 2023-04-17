@@ -1,6 +1,8 @@
+import { Logger } from "../utils/logger";
 import { Class } from "../utils/types";
-import { Entity } from "./entity";
-import { World } from "./world";
+import type { World } from "./world";
+
+const logger = new Logger("Component Storage");
 
 export class StorageManager {
     public readonly storages: ComponentStorage[] = [];
@@ -8,6 +10,7 @@ export class StorageManager {
     constructor(public world: World) {}
 
     loadFromData(data: ComponentStorage[]) {
+        logger.log("Loading from data dump:", data);
         data.forEach((storage, id) => {
             // Still need to actually create the class
             this.storages[id] = Object.create(
@@ -28,6 +31,14 @@ export class StorageManager {
             id,
             this.world.maxEntities
         );
+        logger.log(
+            "Created new data storage for",
+            id,
+            "(Type:",
+            storageId,
+            ")"
+        );
+
         return this.storages[id];
     }
 
@@ -259,11 +270,17 @@ COMPONENT_STORAGES.set(1, NumberComponentStorage);
 
 export const CUSTOM_COMPONENT_STORAGES: Map<number, any> = new Map();
 export function loadCustomComponentStorages(customStorages: Map<number, any>) {
+    logger.log(
+        "Loading custom storage classes from data dump:",
+        customStorages
+    );
+
     for (const [id, data] of customStorages) {
         switch (data.type) {
             case "enum": {
                 const storage = createEnumComponentStorage(id, data.options);
                 COMPONENT_STORAGES.set(id, storage);
+                break;
             }
             case "nullable": {
                 const storage = createNullableComponentStorage(

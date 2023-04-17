@@ -1,8 +1,10 @@
+import { Logger } from "../utils/logger";
 import { Class } from "../utils/types";
 import { TypeId } from "./component";
 import { intoID } from "./entity";
 import { World } from "./world";
 
+const logger = new Logger("World", "Resources");
 export class ResourceManager {
     public readonly resources: Map<number, any> = new Map();
 
@@ -10,6 +12,7 @@ export class ResourceManager {
 
     addResource(resource: any, id: number = resource.constructor.getId()) {
         this.resources.set(id, resource);
+        logger.log("Added resource", resource, "(Id:", id, ")");
     }
 
     removeResource(id: intoID) {
@@ -26,6 +29,8 @@ export class ResourceManager {
 
     /** @internal */
     public loadFromData(data: any) {
+        logger.log("Loading from data dump:", data);
+
         //@ts-ignore
         this.resources = data;
     }

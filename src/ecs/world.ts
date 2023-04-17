@@ -1,6 +1,6 @@
 import { Class } from "../utils/types";
-import { Entity, intoID } from "./entity";
-import "./entity";
+import { Entity, intoID, loadEntityMethods } from "./entity";
+// import "./entity";
 import "../utils/setFns";
 import { QueryManager, QueryModifier } from "./query";
 import { StorageManager } from "./storage";
@@ -10,11 +10,18 @@ import { WorkerManager } from "./worker_manager";
 import { ArchetypeManager } from "./archetype";
 import { ResourceManager } from "./resource";
 import { Logger } from "../utils/logger";
+import { loadComponentMethods } from "./component";
+import { loadSetMethods } from "../utils/setFns";
+
+const logger = new Logger("World");
+
+let shouldRunPolyfills = true;
+export function disablePolyfills() {
+    shouldRunPolyfills = false;
+}
 
 export class World {
     public static readonly GLOBAL_WORLD: World;
-    private static nextComponentId = 0;
-    public static getUniqueComponentId = () => this.nextComponentId++;
 
     public readonly entities: Int32Array;
 
@@ -32,6 +39,14 @@ export class World {
     public readonly resourceManager: ResourceManager;
 
     constructor(private internalMaxEntities: number) {
+        if (shouldRunPolyfills) {
+            loadSetMethods();
+            loadEntityMethods();
+            loadComponentMethods();
+        }
+
+        logger.group("Creating world with", internalMaxEntities, "entities");
+
         this.storageManager = new StorageManager(this);
         this.queryManager = new QueryManager(this);
         this.workerManager = new WorkerManager(this);
@@ -47,6 +62,13 @@ export class World {
 
         //@ts-ignore
         World.GLOBAL_WORLD = this;
+
+        logger.groupEnd();
+        logger.logOk(
+            "Created world with max capacity of",
+            internalMaxEntities,
+            "entities"
+        );
     }
 
     get maxEntities() {
@@ -56,7 +78,7 @@ export class World {
     set maxEntities(v: number) {
         this.internalMaxEntities = v;
 
-        Logger.log("Resizing all storages to" + v);
+        logger.log("Resizing all storages for", v, "entities...");
         this.archetypeManager.resize(v);
         this.storageManager.resize(v);
     }
@@ -97,8 +119,8 @@ export class World {
         this.systemManager.addSystem(system);
     }
 
-    async addRemoteSystem(url: string) {
-        const id = await this.workerManager.loadWorkerSystem(url);
+    async addRemoteSystem(url: string, numThreads?: number) {
+        const id = await this.workerManager.loadWorkerSystem(url, numThreads);
         this.systemManager.addRemoteSystem(id);
     }
 
@@ -110,8 +132,8 @@ export class World {
         this.systemManager.disable((system as any).id);
     }
 
-    update(...systems: Class<InternalSystem<any>>[]) {
-        this.systemManager.update(
+    update(...systems: Class<InternalSystem<any>>[]): Promise<void> {
+        return this.systemManager.update(
             ...systems.map((system: any) => system.id as number)
         );
     }
