@@ -12,14 +12,25 @@ import {
     registerNullableComponentStorage,
 } from "./storage";
 
-const logger = new Logger("Components")
+const logger = new Logger("Components");
+
+const CACHED_HASH = Symbol("CACHED_HASH");
+
 declare global {
-    interface Object {
+    interface Function {
+        getId(): number;
+
+        /** @internal */
+        [CACHED_HASH]?: number;
+    }
+
+    interface String {
         getId(): number;
     }
 }
 
-let nextComponentId: number = 0;
+// Start at 1, because relationship components don't work if the relationship part is 0
+let nextComponentId: number = 1;
 export function getUniqueComponentId() {
     return nextComponentId++;
 }
@@ -36,12 +47,57 @@ export const setIdMap = (map: Record<string, number>): void => {
     }
 };
 
+export type ObjectIDMethod =
+    | "MANUALLY IMPLEMENTED"
+    | "CONSTRUCTOR NAME"
+    | "CONSTRUCTOR HASH";
+
+export function setObjectIdImplementation(method: ObjectIDMethod) {
+    switch (method) {
+        case "MANUALLY IMPLEMENTED":
+            Function.prototype.getId = function () {
+                logger.error(
+                    "Cannot get the ID of object:",
+                    this,
+                    `because the "MANUALLY_IMPLEMENTED" method of getId() was chosen `
+                );
+                throw new Error("Cannot get the ID of object");
+            };
+            break;
+
+        case "CONSTRUCTOR HASH":
+            Function.prototype.getId = function () {
+                if (this[CACHED_HASH]) {
+                    return this[CACHED_HASH];
+                }
+
+                const string = this.toString();
+                let h!: number;
+                for (let i = 0; i < string.length; i++)
+                    h = (Math.imul(31, h) + string.charCodeAt(i)) | 0;
+
+                this[CACHED_HASH] = h;
+                return h;
+            };
+            break;
+
+        case "CONSTRUCTOR NAME":
+            Function.prototype.getId = function () {
+                return (ID_MAP[this.name] ??= getUniqueComponentId());
+            };
+    }
+}
+
 export function loadComponentMethods() {
-    Object.prototype.getId = function () {
-        return (ID_MAP[this.constructor.name] ??= getUniqueComponentId());
+    setObjectIdImplementation("CONSTRUCTOR NAME");
+
+    String.prototype.getId = function (this: string) {
+        return (ID_MAP[this] ??= getUniqueComponentId());
     };
-    
-    logger.logOk("Patched Object prototype, 3rd party external components are now available");
+
+    logger.logOk(
+        "Patched Object prototype, 3rd party external components are now available"
+    );
 }
 
 export type TypeId<T = any> = number & {
@@ -63,7 +119,12 @@ export interface Type {
     component<T>(component?: { schema: T }): TypeId<T>;
     enum<T extends string>(...options: T[]): TypeId<T>;
 
-    tuple<const A extends any[], T extends {[key in keyof A]: TypeId<A[key]>}>(...args: T): T;
+    tuple<
+        const A extends any[],
+        T extends { [key in keyof A]: TypeId<A[key]> }
+    >(
+        ...args: T
+    ): T;
 
     vec<T, L extends number>(
         type: TypeId<T>,
@@ -222,8 +283,8 @@ export function Component<
 }
 
 // Shout out to chatGPT holy shit that thing is good
-type UnwrapTypeSignatures<T> = T extends TypeId<infer U>
-    ? U extends Record<string, TypeId>// check if U is an object to handle nested objects
+export type UnwrapTypeSignatures<T> = T extends TypeId<infer U>
+    ? U extends Record<string, TypeId> // check if U is an object to handle nested objects
         ? {
               +readonly [K in keyof U]: U[K] extends TypeId<any>
                   ? U[K]
@@ -234,7 +295,7 @@ type UnwrapTypeSignatures<T> = T extends TypeId<infer U>
     ? { +readonly [K in keyof T]: UnwrapTypeSignatures<T[K]> }
     : T;
 
-type ExtractTypesFromTypeSignatureTree<T extends Tree<any>> = {
+export type ExtractTypesFromTypeSignatureTree<T extends Tree<any>> = {
     +readonly [K in keyof T]: T[K] extends TypeId<infer U>
         ? ExtractTypesFromTypeSignatureTree<U>
         : ExtractTypesFromTypeSignatureTree<T[K]>;

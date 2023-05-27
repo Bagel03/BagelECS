@@ -26,3 +26,7 @@ export type FixedLengthArray<
     L extends number,
     A extends unknown[] = []
 > = A["length"] extends L ? A : FixedLengthArray<T, L, [...A, T]>;
+
+export type ConcreteClass<T> = new (...args: any[]) => T & {
+    [key in keyof T]: T[key];
+};

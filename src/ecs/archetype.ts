@@ -12,6 +12,11 @@ export class Archetype {
     // Use the [length, ...data] syntax to sync archetypes between threads
     public readonly entities: Int32Array;
 
+    // Keep track of modifications so we dont have to diff the whole archetype every time
+    // I would like to use something other than time for this, but theres a whole host of bugs that
+    // come with using a combination of the last function (add, remove) and the entity.
+    public lastModified: number;
+
     constructor(
         public readonly id: number,
         public readonly components: Set<number>,
@@ -22,21 +27,27 @@ export class Archetype {
                 Int32Array.BYTES_PER_ELEMENT * (expectedSize + 1)
             )
         );
+
+        this.lastModified = performance.now();
     }
 
     addEntity(entity: Entity) {
         // TODO: Check if max length is reached
         this.entities[++this.entities[0]] = entity;
+
+        this.lastModified = performance.now();
     }
 
     removeEntity(entity: Entity) {
-        for (let i = 1; i < this.entities[0]; i++) {
+        for (let i = 1; i <= this.entities[0]; i++) {
             if (this.entities[i] === entity) {
                 // Swap the entity and the last one
                 this.entities[i] = this.entities[this.entities[0]--];
                 break;
             }
         }
+
+        this.lastModified = performance.now();
     }
 
     /** @internal */
@@ -117,6 +128,16 @@ export class ArchetypeManager {
     }
 
     entityAddComponent(entity: Entity, component: number) {
+        if (entity.has(component)) {
+            logger.warn(
+                "Entity",
+                entity,
+                "tried to add component (ID:",
+                component,
+                ") which it already had"
+            );
+            return;
+        }
         // TODO: Make this faster
         const firstArchetype = this.archetypes.get(
             this.entityArchetypes[entity]
@@ -134,10 +155,10 @@ export class ArchetypeManager {
                 ) {
                     // Make sure it has all the old ones plus the new one
                     if (
+                        candidateArchetype.components.has(component) &&
                         firstArchetype.components.every((c) =>
                             candidateArchetype.components.has(c)
-                        ) &&
-                        candidateArchetype.components.has(component)
+                        )
                     ) {
                         firstArchetype.graph.added.set(
                             component,
@@ -165,6 +186,17 @@ export class ArchetypeManager {
     }
 
     entityRemoveComponent(entity: Entity, component: number) {
+        if (!entity.has(component)) {
+            logger.warn(
+                "Entity",
+                entity,
+                "tried to remove component (ID:",
+                component,
+                ") which it did not have"
+            );
+            return;
+        }
+
         // Very similar to entityAddComponent, check there for comments
         const firstArchetype = this.archetypes.get(
             this.entityArchetypes[entity]

@@ -1,6 +1,6 @@
 {
   "name": "bagelecs",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A fast ecs with great dx",
   "main": "dist/bundle.js",
   "types": "dist/types.d.ts",

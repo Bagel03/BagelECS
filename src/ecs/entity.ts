@@ -1,7 +1,16 @@
-import { Class } from "../utils/types";
-import { InternalComponent, Type, TypeId } from "./component";
+import { Class, Tree } from "../utils/types";
+import {
+    Component,
+    ExtractTypesFromTypeSignatureTree,
+    InternalComponent,
+    Type,
+    TypeId,
+    UnwrapTypeSignatures,
+} from "./component";
 import { World } from "./world";
 import { Logger } from "../utils/logger";
+import { loadRelationshipMethods } from "./relationships";
+import { loadHierarchyMethods } from "./hierarchy";
 
 const logger = new Logger("Entities");
 
@@ -27,9 +36,25 @@ export interface EntityAPI {
             ? Type[key]
             : never]: Type[key] extends TypeId ? Type[key]["_type"] : never;
     };
+
+    link<
+        TTypeID extends Tree<TypeId>,
+        TType extends ExtractTypesFromTypeSignatureTree<TTypeID>,
+        TKey extends string,
+        TObject extends Record<TKey, TType>
+    >(
+        this: Entity,
+        component: TTypeID,
+        object: TObject,
+        key: TKey
+    ): void;
 }
 
 export type Entity = number & EntityAPI;
+
+export const extraEntityMethodLoaders: (() => void)[] = [];
+loadRelationshipMethods(extraEntityMethodLoaders);
+loadHierarchyMethods(extraEntityMethodLoaders);
 
 /** @internal */
 export function loadEntityMethods() {
@@ -51,7 +76,7 @@ export function loadEntityMethods() {
 
                 if (component.cachedValues[i] === null) continue;
 
-                storage.addEnt(this, component.cachedValues[i]);
+                storage.addOrSetEnt(this, component.cachedValues[i]);
             }
             return;
         }
@@ -62,7 +87,7 @@ export function loadEntityMethods() {
 
         World.GLOBAL_WORLD.storageManager
             .getStorage(id, component.storageType)
-            .addEnt(this, component);
+            .addOrSetEnt(this, component);
     };
 
     //@ts-expect-error
@@ -75,7 +100,7 @@ export function loadEntityMethods() {
         World.GLOBAL_WORLD.storageManager
             // It doesn't matter what storage kind we pass in, we know it already exists.
             .getStorage(valOrId, 0)
-            .addEnt(this, component);
+            .addOrSetEnt(this, component);
     };
 
     //@ts-expect-error
@@ -140,5 +165,37 @@ export function loadEntityMethods() {
         );
     };
 
+    // @ts-expect-error
+    Number.prototype.link = function <
+        TTypeID extends Tree<TypeId>,
+        TType extends ExtractTypesFromTypeSignatureTree<TTypeID>,
+        TKey extends string,
+        TObject extends Record<TKey, TType>
+    >(this: Entity, component: TTypeID, object: TObject, key: TKey): void {
+        if (typeof component === "number") {
+            World.GLOBAL_WORLD.storageManager.storages[component].link(
+                object,
+                key,
+                this
+            );
+        } else {
+            for (const key in Object.keys(component)) {
+                this.link(component[key], object[key], key);
+            }
+        }
+    };
+
+    extraEntityMethodLoaders.forEach((method) => method());
     logger.logOk("Loaded all entity polyfills");
 }
+
+const x = Component({ y: Type.number, x: { z: Type.string, a: Type.number } });
+
+const y = 0 as Entity;
+
+const tempData = { y: 2, x: { z: "hi", a: 0 } };
+
+y.link(x.x.z, tempData.x, "z");
+
+
+type l = ExtractTypesFromTypeSignatureTree<TypeId<string>>;

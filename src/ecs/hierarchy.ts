@@ -1,77 +1,103 @@
 // import { Component, Type } from "./component";
-// import { Entity } from "./entity";
+import { getUniqueComponentId } from "./component";
+import type { Entity } from "./entity";
+import type { QueryModifier, QueryModifierFactory } from "./query";
+import { WithRelationship } from "./relationships";
 
-// const Hierarchy = Component({
-//     firstChild: Type.nullable(Type.entity),
-//     nextSibling: Type.nullable(Type.entity),
-//     parent: Type.nullable(Type.entity),
-// });
+declare module "./entity" {
+    interface EntityAPI {
+        addChild(child: Entity): void;
+        removeChild(child: Entity): void;
+        children(): Entity[];
+        parent(): Entity | null;
+    }
+}
 
-// declare module "./entity" {
-//     export interface EntityAPI {
-//         addChild(entity: Entity): void;
-//         removeChild(entity: Entity): void;
-//         children(): IterableIterator<Entity>;
-//     }
-// }
+export let CHILD!: number;
+export let PARENT!: number;
 
-// //@ts-expect-error
-// Number.prototype.addChild = function (this: Entity, entity: Entity): void {
-//     let myHierarchy = this.get(Hierarchy);
+export const loadHierarchyMethods = (methodLoaders: any[]) =>
+    methodLoaders.push(() => {
+        CHILD = getUniqueComponentId();
+        PARENT = getUniqueComponentId();
 
-//     if (!myHierarchy) {
-//         myHierarchy = new Hierarchy({
-//             firstChild: null,
-//             nextSibling: null,
-//             parent: null,
-//         });
-//         this.add(myHierarchy);
-//     }
+        //@ts-expect-error
+        Number.prototype.addChild = function (
+            this: Entity,
+            child: Entity
+        ): void {
+            this.relate(CHILD, child);
+            child.relate(PARENT, this);
+        };
 
-//     let oldFirstChild = this.get(Hierarchy.firstChild);
-//     this.update(Hierarchy.firstChild, entity);
+        //@ts-expect-error
+        Number.prototype.children = function (this: Entity) {
+            return this.getAllRelatedBy(CHILD);
+        };
+        console.log("Added");
+    });
 
-//     if (entity.has(Hierarchy)) {
-//         // TODO;
-//     } else {
-//         entity.add(
-//             new Hierarchy({
-//                 parent: this,
-//                 firstChild: null,
-//                 nextSibling: oldFirstChild,
-//             })
-//         );
-//     }
-// };
+// Parent query modifier
+export const Parent: QueryModifierFactory<
+    [] | [entity: Entity] | [requirements: QueryModifier]
+> = (arg?) => {
+    if (typeof arg == "number") {
+        return WithRelationship(PARENT, arg);
+    }
 
-// //@ts-ignore
-// Number.prototype.removeChild = function (this: Entity, entity: Entity) {
-//     if (this.get(Hierarchy.firstChild) == entity) {
-//         this.update(Hierarchy.firstChild, entity.get(Hierarchy.nextSibling));
-//         return;
-//     }
+    const fn: QueryModifier = WithRelationship(PARENT);
 
-//     let lastChild = this.get(Hierarchy.firstChild)!;
-//     let child = lastChild.get(Hierarchy.nextSibling);
-//     while (child) {
-//         if (child == entity) {
-//             lastChild.update(
-//                 Hierarchy.nextSibling,
-//                 child.get(Hierarchy.nextSibling)
-//             );
-//             break;
-//         }
-//     }
-// };
+    // If there is not requirement for the parent just return this
+    if (arg == undefined) {
+        return fn;
+    }
 
-// //@ts-expect-error
-// Number.prototype.children = function* (this: Entity) {
-//     if (!this.has(Hierarchy) || this.get(Hierarchy.firstChild) === null) return;
+    // Add the narrower
 
-//     let child = this.get(Hierarchy.firstChild)!;
-//     yield child;
+    // We need to check if the modifier passed in is also narrowed, to support recursive things
+    if (typeof arg.narrower !== "undefined") {
+        fn.narrower = function (ent: Entity) {
+            const parent = ent.getSingleRelatedBy(PARENT)!;
+            if (!arg(parent.components())) return false;
 
-//     while ((child = child.get(Hierarchy.nextSibling)!)) {
-//         yield child;
-//     }
-// };
+            return arg.narrower!(parent);
+        };
+    } else {
+        fn.narrower = function (ent: Entity) {
+            return arg(ent.getSingleRelatedBy(PARENT)!.components());
+        };
+    }
+
+    return fn;
+};
+
+// Child query modifier
+export const Child: QueryModifierFactory<
+    [] | [entity: Entity] | [requirements: QueryModifier]
+> = (arg?) => {
+    if (typeof arg == "number") {
+        return WithRelationship(CHILD, arg);
+    }
+
+    const fn = WithRelationship(CHILD);
+
+    if (typeof arg == "undefined") return fn;
+
+    // Same as parent, we have to check if the modifier is narrowed to support recursive narrows
+    if (typeof arg.narrower == "function") {
+        fn.narrower = function (entity) {
+            const children = entity.children();
+            if (!children.some((child) => arg(child.components())))
+                return false;
+
+            return children.some((child) => arg.narrower!(child));
+        };
+    } else
+        fn.narrower = function (entity) {
+            return entity
+                .getAllRelatedBy(CHILD)
+                .some((ent) => arg(ent.components()));
+        };
+
+    return fn;
+};

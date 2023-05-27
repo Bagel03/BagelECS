@@ -1,6 +1,5 @@
 import { Class } from "../utils/types";
 import { Entity, intoID, loadEntityMethods } from "./entity";
-// import "./entity";
 import "../utils/setFns";
 import { QueryManager, QueryModifier } from "./query";
 import { StorageManager } from "./storage";
@@ -12,13 +11,10 @@ import { ResourceManager } from "./resource";
 import { Logger } from "../utils/logger";
 import { loadComponentMethods } from "./component";
 import { loadSetMethods } from "../utils/setFns";
+import "./relationships";
+import "./hierarchy";
 
 const logger = new Logger("World");
-
-let shouldRunPolyfills = true;
-export function disablePolyfills() {
-    shouldRunPolyfills = false;
-}
 
 export class World {
     public static readonly GLOBAL_WORLD: World;
@@ -39,12 +35,6 @@ export class World {
     public readonly resourceManager: ResourceManager;
 
     constructor(private internalMaxEntities: number) {
-        if (shouldRunPolyfills) {
-            loadSetMethods();
-            loadEntityMethods();
-            loadComponentMethods();
-        }
-
         logger.group("Creating world with", internalMaxEntities, "entities");
 
         this.storageManager = new StorageManager(this);

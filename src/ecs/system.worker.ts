@@ -6,7 +6,7 @@ logger.groupCollapsed("Worker thread created");
 import { StorageManager, loadCustomComponentStorages } from "./storage";
 import { InternalSystem } from "./system";
 import { MessageType } from "./worker_manager";
-import { World, disablePolyfills } from "./world";
+import { World } from "./world";
 import { Archetype } from "./archetype";
 import { loadComponentMethods, setIdMap } from "./component";
 import { Class } from "../utils/types";
@@ -14,7 +14,6 @@ import { loadEntityMethods } from "./entity";
 import { loadSetMethods } from "../exports";
 
 // We want to log these ourselves
-disablePolyfills();
 logger.groupCollapsed("Load worker thread methods");
 loadEntityMethods();
 loadSetMethods();

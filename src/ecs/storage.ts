@@ -1,5 +1,7 @@
 import { Logger } from "../utils/logger";
-import { Class } from "../utils/types";
+import { Class, ConcreteClass } from "../utils/types";
+import { TypeId } from "./component";
+import { Entity } from "./entity";
 import type { World } from "./world";
 
 const logger = new Logger("Component Storage");
@@ -23,14 +25,11 @@ export class StorageManager {
     getStorage(id: number, storageId: number) {
         if (this.storages[id]) return this.storages[id];
 
-        // console.warn(
-        //     "Creating new storage, make sure to sync workers before next update"
-        // );
-
         this.storages[id] = new (COMPONENT_STORAGES.get(storageId)!)(
             id,
             this.world.maxEntities
         );
+
         logger.log(
             "Created new data storage for",
             id,
@@ -49,16 +48,25 @@ export class StorageManager {
     }
 }
 
+export interface ComponentStorage<T = any> {
+    getEnt(id: Entity): T;
+    addOrSetEnt(id: Entity, val: T): void;
+    deleteEnt(id: Entity): void;
+
+    resize(maxEnts: number): void;
+
+    readonly storageKind: number;
+}
+
 export abstract class ComponentStorage<T = any> {
     constructor(public readonly id: number, size: number) {}
 
-    abstract getEnt(id: number): T;
-    abstract addEnt(id: number, val: T): void;
-    abstract deleteEnt(id: number): void;
-
-    abstract resize(maxEnts: number): void;
-
-    abstract readonly storageKind: number;
+    link<T>(object: T, property: keyof T, entity: Entity): void {
+        Object.defineProperty(object, property, {
+            get: () => this.getEnt(entity),
+            set: (val) => this.addOrSetEnt(entity, val),
+        });
+    }
 }
 
 export class AnyComponentStorage extends ComponentStorage<any> {
@@ -69,7 +77,7 @@ export class AnyComponentStorage extends ComponentStorage<any> {
         return this.internalArr[id];
     }
 
-    addEnt(id: number, val: any) {
+    addOrSetEnt(id: number, val: any) {
         this.internalArr[id] = val;
     }
 
@@ -111,7 +119,7 @@ export class NumberComponentStorage extends ComponentStorage<number> {
         // Could be unsafe, but getting it will just return the old one
     }
 
-    addEnt(id: number, val: number): void {
+    addOrSetEnt(id: number, val: number): void {
         this.internalArray[id] = val;
     }
 }
@@ -134,7 +142,7 @@ export class BooleanComponentStorage extends ComponentStorage<boolean> {
         return !!this.internalArray[id];
     }
 
-    addEnt(id: number, val: boolean): void {
+    addOrSetEnt(id: number, val: boolean): void {
         this.internalArray[id] = +val;
     }
 
@@ -176,7 +184,7 @@ const createEnumComponentStorage = <T extends string>(
             return options[this.internalArray[id]];
         }
 
-        addEnt(id: number, value: T): void {
+        addOrSetEnt(id: number, value: T): void {
             this.internalArray[id] = options.indexOf(value);
         }
 
@@ -212,26 +220,25 @@ const createNullableComponentStorage = <T>(
     id: number,
     originalStorageId: number
 ) => {
-    const superStorage = COMPONENT_STORAGES.get(originalStorageId)!;
+    const superStorage = COMPONENT_STORAGES.get(originalStorageId)! as Class<
+        ComponentStorage<T>
+    >;
 
-    return class NullableComponentStorage
-        extends (superStorage as any)
-        implements ComponentStorage<T>
-    {
+    return class NullableComponentStorage extends superStorage {
         private readonly nullValues: Set<number> = new Set();
         public readonly storageKind: number = id;
 
         declare id: number;
 
-        addEnt(id: number, val: T): void {
+        addOrSetEnt(id: Entity, val: T): void {
             if (val == null) {
                 this.nullValues.add(id);
             } else {
-                super.addEnt(id, val);
+                super.addOrSetEnt(id, val);
             }
         }
 
-        getEnt(id: number): T {
+        getEnt(id: Entity): T {
             if (this.nullValues.has(id)) return null as any;
             return super.getEnt(id);
         }
@@ -240,7 +247,7 @@ const createNullableComponentStorage = <T>(
             super.resize(maxEnts);
         }
 
-        deleteEnt(id: number): void {
+        deleteEnt(id: Entity): void {
             super.deleteEnt(id);
         }
     };
