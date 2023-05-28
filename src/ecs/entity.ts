@@ -1,6 +1,7 @@
 import { Class, Tree } from "../utils/types";
 import {
     Component,
+    ExtractTypesFromTypeSignature,
     ExtractTypesFromTypeSignatureTree,
     InternalComponent,
     Type,
@@ -39,11 +40,10 @@ export interface EntityAPI {
 
     link<
         TTypeID extends Tree<TypeId>,
-        TType extends ExtractTypesFromTypeSignatureTree<TTypeID>,
+        TType extends ExtractTypesFromTypeSignature<TTypeID>,
         TKey extends string,
         TObject extends Record<TKey, TType>
     >(
-        this: Entity,
         component: TTypeID,
         object: TObject,
         key: TKey
@@ -166,12 +166,12 @@ export function loadEntityMethods() {
     };
 
     // @ts-expect-error
-    Number.prototype.link = function <
-        TTypeID extends Tree<TypeId>,
-        TType extends ExtractTypesFromTypeSignatureTree<TTypeID>,
-        TKey extends string,
-        TObject extends Record<TKey, TType>
-    >(this: Entity, component: TTypeID, object: TObject, key: TKey): void {
+    Number.prototype.link = function (
+        this: Entity,
+        component: Tree<TypeId>,
+        object: any,
+        key: string
+    ): void {
         if (typeof component === "number") {
             World.GLOBAL_WORLD.storageManager.storages[component].link(
                 object,
@@ -180,7 +180,7 @@ export function loadEntityMethods() {
             );
         } else {
             for (const key in Object.keys(component)) {
-                this.link(component[key], object[key], key);
+                this.link((component as any)[key], object[key], key);
             }
         }
     };
@@ -188,14 +188,3 @@ export function loadEntityMethods() {
     extraEntityMethodLoaders.forEach((method) => method());
     logger.logOk("Loaded all entity polyfills");
 }
-
-const x = Component({ y: Type.number, x: { z: Type.string, a: Type.number } });
-
-const y = 0 as Entity;
-
-const tempData = { y: 2, x: { z: "hi", a: 0 } };
-
-y.link(x.x.z, tempData.x, "z");
-
-
-type l = ExtractTypesFromTypeSignatureTree<TypeId<string>>;

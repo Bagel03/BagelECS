@@ -1,3 +1,4 @@
+import { extname } from "path";
 import { Logger } from "../utils/logger";
 import { flattenTree } from "../utils/tree";
 import {
@@ -300,3 +301,7 @@ export type ExtractTypesFromTypeSignatureTree<T extends Tree<any>> = {
         ? ExtractTypesFromTypeSignatureTree<U>
         : ExtractTypesFromTypeSignatureTree<T[K]>;
 };
+
+export type ExtractTypesFromTypeSignature<T> = T extends TypeId<infer U>
+    ? U
+    : ExtractTypesFromTypeSignatureTree<T>;

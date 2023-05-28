@@ -40,6 +40,7 @@ export class Query {
 
     addTargetedArchetype(archetype: Archetype) {
         this.targetedArchetypes.push(archetype);
+        this.lastCheckedArchetypes.set(archetype, -Infinity);
     }
 
     // Default (no narrower)
