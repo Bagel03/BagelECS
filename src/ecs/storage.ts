@@ -1,6 +1,5 @@
 import { Logger } from "../utils/logger";
-import { Class, ConcreteClass } from "../utils/types";
-import { TypeId } from "./component";
+import { Class } from "../utils/types";
 import { Entity } from "./entity";
 import type { World } from "./world";
 

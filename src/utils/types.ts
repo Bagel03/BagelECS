@@ -5,6 +5,9 @@ export type Tree<T> =
     | T[]
     | {
           readonly [idx: string]: Tree<T>;
+      }
+    | {
+          readonly [idx: number]: Tree<T>;
       };
 
 export type MatchingTree<T, Old, New> = T extends Record<string, Tree<Old>>
@@ -26,7 +29,3 @@ export type FixedLengthArray<
     L extends number,
     A extends unknown[] = []
 > = A["length"] extends L ? A : FixedLengthArray<T, L, [...A, T]>;
-
-export type ConcreteClass<T> = new (...args: any[]) => T & {
-    [key in keyof T]: T[key];
-};

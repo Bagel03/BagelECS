@@ -122,6 +122,29 @@ export class ArchetypeManager {
         return newArchetype;
     }
 
+    getOrCreateArchetype(components: Set<number>): Archetype {
+        for (const [_, archetype] of this.archetypes) {
+            if (archetype.components.size !== components.size) continue;
+
+            let hasAll = true;
+            for (const needed of components) {
+                if (!archetype.components.has(needed)) {
+                    hasAll = false;
+                    break;
+                }
+            }
+
+            if (hasAll) return archetype;
+        }
+
+        return this.createNewArchetype(components);
+    }
+
+    moveWithoutGraph(entity: Entity, from: Archetype, to: Archetype) {
+        from.removeEntity(entity);
+        to.addEntity(entity);
+    }
+
     addEntity(entity: Entity) {
         this.entityArchetypes[entity] = 0;
         this.defaultArchetype.addEntity(entity);
