@@ -16,6 +16,9 @@ BagelECS is my attempt to create a typescript ECS implementation that is both pe
 npm i bagelecs
 ```
 
+## Docs
+Check out the docs [here](https://bagel03.github.io/BagelECS/) for general guides and the API reference.
+
 ## Quick start
 
 ```ts
