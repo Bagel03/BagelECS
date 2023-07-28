@@ -143,6 +143,7 @@ export class ArchetypeManager {
     moveWithoutGraph(entity: Entity, from: Archetype, to: Archetype) {
         from.removeEntity(entity);
         to.addEntity(entity);
+        this.entityArchetypes[entity] = to.id;
     }
 
     addEntity(entity: Entity) {

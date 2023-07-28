@@ -1,7 +1,8 @@
-import { Class, Tree } from "../utils/types";
+import { Class, KeysOfObjWhere, Tree } from "../utils/types";
 import {
     Component,
-    ExtractTypesFromTypeSignature,
+    ComponentClass,
+    ExtractTypeId,
     ExtractTypesFromTypeSignatureTree,
     InternalComponent,
     Type,
@@ -12,18 +13,25 @@ import { World } from "./world";
 import { Logger } from "../utils/logger";
 import { loadRelationshipMethods } from "./relationships";
 import { loadHierarchyMethods } from "./hierarchy";
+import { NumberComponentStorage } from "./storage";
 
 const logger = new Logger("Entities");
 
 export type intoID = number | { getId(): number };
 
 export interface EntityAPI {
+    readonly world: World;
+
     add(component: any, id?: intoID): void;
     update(component: any): void;
     update<T>(id: intoID | TypeId<T>, component: T): void;
 
+    get<T extends ComponentClass<any, {}, TypeId>>(
+        component: T
+    ): T extends ComponentClass<any, {}, TypeId<infer U>> ? U : never;
+
+    get<T extends Class<any>>(component: T): InstanceType<T>;
     get<T>(id: intoID | TypeId<T>): T;
-    get<T, C extends Class<T>>(component: C): T;
     remove(id: intoID): void;
     has(id: intoID): boolean;
 
@@ -40,14 +48,24 @@ export interface EntityAPI {
 
     link<
         TTypeID extends Tree<TypeId>,
-        TType extends ExtractTypesFromTypeSignature<TTypeID>,
-        TKey extends string,
-        TObject extends Record<TKey, TType>
+        TType extends ExtractTypeId<TTypeID>,
+        TObject extends {},
+        TKey extends KeysOfObjWhere<TObject, TType>
     >(
         component: TTypeID,
         object: TObject,
-        key: TKey
+        key: TKey,
+        slowBackwardsLink?: boolean
     ): void;
+
+    getLinkInfo<T = any>(
+        component: TypeId<T>
+    ): [key: number | string, obj: Record<number | string, T>];
+
+    // Useful number methods
+    inc(component: TypeId<number>, amount: number): void;
+    mult(component: TypeId<number>, amount: number): void;
+    mod(component: TypeId<number>, modulo: number): void;
 }
 
 export type Entity = number & EntityAPI;
@@ -58,6 +76,15 @@ loadHierarchyMethods(extraEntityMethodLoaders);
 
 /** @internal */
 export function loadEntityMethods() {
+    //@ts-ignore
+    Object.defineProperty(Number.prototype, "world", {
+        configurable: false,
+        enumerable: false,
+        get() {
+            return World.GLOBAL_WORLD;
+        },
+    });
+
     //@ts-expect-error
     Number.prototype.add = function (
         this: Entity,
@@ -65,20 +92,27 @@ export function loadEntityMethods() {
         id = component.constructor.getId()
     ) {
         World.GLOBAL_WORLD.archetypeManager.entityAddComponent(this, id);
+
         if (component instanceof InternalComponent) {
-            const { propertyIds } = component.constructor as any;
-            for (let i = 0; i < propertyIds.length; i++) {
-                // Create the storage even if the value is null
-                const storage = World.GLOBAL_WORLD.storageManager.getStorage(
-                    propertyIds[i],
-                    component.cachedValues[i].storageType
-                );
+            const { propertyIds, propertyNames, schema } =
+                component.constructor as any;
 
-                if (component.cachedValues[i] === null) continue;
+            if (propertyIds.length === 0) {
+                // "Simple" component
+                component = component.cachedValues;
+            } else {
+                for (let i = 0; i < propertyIds.length; i++) {
+                    const storage =
+                        World.GLOBAL_WORLD.storageManager.getStorage(
+                            propertyIds[i],
+                            schema[propertyNames[i]]
+                        );
 
-                storage.addOrSetEnt(this, component.cachedValues[i]);
+                    storage.addOrSetEnt(this, component.cachedValues[i]);
+                }
+
+                return;
             }
-            return;
         }
 
         if (typeof id !== "number") {
@@ -92,10 +126,11 @@ export function loadEntityMethods() {
 
     //@ts-expect-error
     Number.prototype.update = function (this: Entity, valOrId, component) {
-        if (!component) component = valOrId;
-        if (typeof valOrId !== "number") valOrId = valOrId.getId();
+        if (component == null) component = valOrId;
 
-        if (component === null) return;
+        if (typeof valOrId == "string") valOrId = valOrId.getId();
+        else if (typeof valOrId !== "number")
+            valOrId = valOrId.constructor.getId();
 
         World.GLOBAL_WORLD.storageManager
             // It doesn't matter what storage kind we pass in, we know it already exists.
@@ -170,19 +205,71 @@ export function loadEntityMethods() {
         this: Entity,
         component: Tree<TypeId>,
         object: any,
-        key: string
+        key: string,
+        slowBackwardsLink: boolean = false
     ): void {
         if (typeof component === "number") {
             World.GLOBAL_WORLD.storageManager.storages[component].link(
                 object,
                 key,
-                this
+                this,
+                slowBackwardsLink
             );
         } else {
             for (const key in Object.keys(component)) {
                 this.link((component as any)[key], object[key], key);
             }
         }
+    };
+
+    //@ts-ignore
+    Number.prototype.getLinkInfo = function (
+        this: Entity,
+        component: TypeId
+    ): [string | number, Record<string | number, any>] {
+        return [
+            this,
+            World.GLOBAL_WORLD.storageManager.storages[component].internalArray,
+        ];
+    };
+
+    //@ts-ignore
+    Number.prototype.inc = function (
+        this: Entity,
+        component: TypeId<number>,
+        amount: number
+    ) {
+        (
+            World.GLOBAL_WORLD.storageManager.storages[
+                component
+            ] as NumberComponentStorage
+        ).inc(this, amount);
+    };
+
+    //@ts-ignore
+    Number.prototype.mult = function (
+        this: Entity,
+        component: TypeId<number>,
+        amount: number
+    ) {
+        (
+            World.GLOBAL_WORLD.storageManager.storages[
+                component
+            ] as NumberComponentStorage
+        ).mult(this, amount);
+    };
+
+    //@ts-ignore
+    Number.prototype.mod = function (
+        this: Entity,
+        component: TypeId<number>,
+        modulo: number
+    ) {
+        (
+            World.GLOBAL_WORLD.storageManager.storages[
+                component
+            ] as NumberComponentStorage
+        ).mod(this, modulo);
     };
 
     extraEntityMethodLoaders.forEach((method) => method());

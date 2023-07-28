@@ -9,7 +9,7 @@ import { WorkerManager } from "./worker_manager";
 import { ArchetypeManager } from "./archetype";
 import { ResourceManager } from "./resource";
 import { Logger } from "../utils/logger";
-import { loadComponentMethods } from "./component";
+import { TypeId, loadComponentMethods } from "./component";
 import { loadSetMethods } from "../utils/setFns";
 import "./relationships";
 import "./hierarchy";
@@ -21,17 +21,11 @@ export class World {
 
     public readonly entities: Int32Array;
 
-    /** @internal */
     public readonly storageManager: StorageManager;
-    /** @internal */
     public readonly queryManager: QueryManager;
-    /** @internal */
     public readonly workerManager: WorkerManager;
-    /** @internal */
     public readonly systemManager: SystemManager;
-    /** @internal */
     public readonly archetypeManager: ArchetypeManager;
-    /** @internal */
     public readonly resourceManager: ResourceManager;
 
     constructor(private internalMaxEntities: number) {
@@ -85,7 +79,7 @@ export class World {
             if (Array.isArray(component)) {
                 ent.add(component[0], component[1]);
             } else {
-                ent.add(component[0]);
+                ent.add(component);
             }
         }
 
@@ -122,9 +116,33 @@ export class World {
         this.systemManager.disable((system as any).id);
     }
 
-    update(...systems: Class<InternalSystem<any>>[]): Promise<void> {
-        return this.systemManager.update(
-            ...systems.map((system: any) => system.id as number)
-        );
+    tick(): Promise<void> {
+        this.storageManager.update();
+        return this.update();
+    }
+
+    update(...systems: (Class<InternalSystem<any>> | number)[]): Promise<void> {
+        for (let i = systems.length - 1; i >= 0; i--) {
+            if (typeof systems[i] !== "number") {
+                systems[i] = (systems[i] as any).id;
+            }
+        }
+
+        return this.systemManager.update(systems as number[]);
+    }
+
+    addResource(resource: any, id?: intoID) {
+        this.resourceManager.addResource(resource, id);
+    }
+
+    removeResource(id: intoID) {
+        this.resourceManager.removeResource(id);
+    }
+
+    getResource<T extends Class<any>>(resource: T): InstanceType<T>;
+    getResource<T>(id: intoID | TypeId<T>): T;
+
+    getResource<T>(id: intoID | TypeId<T>): T {
+        return this.resourceManager.getResource(id);
     }
 }

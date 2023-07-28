@@ -10,7 +10,9 @@ export class ResourceManager {
 
     constructor(public readonly world: World) {}
 
-    addResource(resource: any, id: number = resource.constructor.getId()) {
+    addResource(resource: any, id: intoID = resource.constructor.getId()) {
+        if (typeof id !== "number") id = id.getId();
+
         this.resources.set(id, resource);
         logger.log("Added resource", resource, "(Id:", id, ")");
     }

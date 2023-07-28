@@ -3,7 +3,7 @@ import { Logger } from "../utils/logger";
 const logger = new Logger("Worker Thread");
 logger.groupCollapsed("Worker thread created");
 
-import { StorageManager, loadCustomComponentStorages } from "./storage";
+import { StorageManager } from "./storage";
 import { InternalSystem } from "./system";
 import { MessageType } from "./worker_manager";
 import { World } from "./world";
@@ -11,7 +11,8 @@ import { Archetype } from "./archetype";
 import { loadComponentMethods, setIdMap } from "./component";
 import { Class } from "../utils/types";
 import { loadEntityMethods } from "./entity";
-import { loadSetMethods } from "../exports";
+import { loadSetMethods } from "../utils/setFns";
+import { loadCustomComponentStorages } from "./custom_storages";
 
 // We want to log these ourselves
 logger.groupCollapsed("Load worker thread methods");

@@ -1,7 +1,7 @@
 import { Logger } from "../utils/logger";
 import { Archetype } from "./archetype";
 import { ID_MAP } from "./component";
-import { CUSTOM_COMPONENT_STORAGES } from "./storage";
+import { CUSTOM_COMPONENT_STORAGES } from "./custom_storages";
 import { World } from "./world";
 import { awaitMessage } from "../utils/await_worker";
 

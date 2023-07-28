@@ -1,3 +1,4 @@
+import { isClass } from "../exports";
 import { Archetype } from "./archetype";
 import { Entity, intoID } from "./entity";
 import type { World } from "./world";
@@ -36,6 +37,11 @@ export class Query {
         }
 
         this.entityNarrower = componentTester.narrower!;
+    }
+
+    ignoreMultithreadingFragmentation() {
+        this.offset = 0;
+        this.stepSize = 1;
     }
 
     addTargetedArchetype(archetype: Archetype) {
@@ -204,7 +210,11 @@ export class QueryManager {
 export const With: QueryModifierFactory<
     [...components: intoID[]] | [modifier: QueryModifier]
 > = (...components) => {
-    if (typeof components[0] === "function")
+    if (
+        components.length === 1 &&
+        typeof components[0] === "function" &&
+        !isClass(components[0])
+    )
         return components[0] as QueryModifier;
 
     components = components.map((c) => (typeof c == "number" ? c : c.getId()));

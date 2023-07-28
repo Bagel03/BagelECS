@@ -20,9 +20,11 @@ export type KeysOfObjWhere<O extends {}, W> = keyof {
     [key in keyof O as O[key] extends W ? key : never]: any;
 };
 
-export type DeepWriteable<T> = {
-    -readonly [P in keyof T]: DeepWriteable<T[P]>;
-};
+export type DeepWriteable<T> = T extends Record<string, any>
+    ? {
+          -readonly [P in keyof T]: DeepWriteable<T[P]>;
+      }
+    : T;
 
 export type FixedLengthArray<
     T,

@@ -53,7 +53,7 @@ export class SystemManager {
         this.registerSystem(id, SystemType.REMOTE);
     }
 
-    update(...systems: number[]) {
+    update(systems: number[]) {
         //@ts-ignore
         if (systems.length == 0) systems = this.enabled;
 
@@ -67,6 +67,6 @@ export class SystemManager {
             }
         }
 
-        return Promise.all(promises) as unknown as Promise<void>;
+        return Promise.all(promises) as any as Promise<void>;
     }
 }

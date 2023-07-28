@@ -34,7 +34,6 @@ export const loadHierarchyMethods = (methodLoaders: any[]) =>
         Number.prototype.children = function (this: Entity) {
             return this.getAllRelatedBy(CHILD);
         };
-        console.log("Added");
     });
 
 // Parent query modifier

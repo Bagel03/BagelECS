@@ -1,3 +1,4 @@
+export * from "../ecs/blueprint";
 export * from "../ecs/component";
 export * from "../ecs/entity";
 export * from "../ecs/hierarchy";

@@ -6,7 +6,7 @@ import type { World } from "./world";
 export class InternalSystem<T extends Tree<Query>> {
     /** @internal */
     public static nextSystemId: number = 0;
-    public static id = this.nextSystemId++;
+    public declare static id: number;
 
     public declare readonly entities: T;
 
@@ -39,11 +39,10 @@ export function System<
 
     class CustomSystemClass extends InternalSystem<T> {
         public readonly entities = realQueries;
+        public static id = InternalSystem.nextSystemId++;
     }
 
-    return CustomSystemClass as typeof CustomSystemClass & {
-        new (world: World): InternalSystem<T>;
-    };
+    return CustomSystemClass as typeof CustomSystemClass;
 
     function intoQueryModifierToQueryModifier(
         query: IntoQueryModifier
@@ -79,7 +78,7 @@ export function System<
     }
 
     function queryModifierToQuery(tree: Tree<IntoQueryModifier>): Tree<Query> {
-        const modifier = intoQueryModifierToQueryModifier(tree);
+        const modifier = intoQueryModifierToQueryModifier(tree as any);
         if (modifier) {
             return new Query(modifier);
         }

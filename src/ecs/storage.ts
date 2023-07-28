@@ -1,12 +1,17 @@
 import { Logger } from "../utils/logger";
 import { Class } from "../utils/types";
+import { findGetter, findSetter } from "../utils/polyfills";
 import { Entity } from "./entity";
 import type { World } from "./world";
+import { ExtractTypeId, TypeId, UnwrapTypeSignatures } from "./component";
 
 const logger = new Logger("Component Storage");
 
 export class StorageManager {
     public readonly storages: ComponentStorage[] = [];
+
+    private readonly updateQueue: ComponentStorage[] = [];
+    private readonly storagesByType = new Map<number, ComponentStorage[]>();
 
     constructor(public world: World) {}
 
@@ -15,19 +20,23 @@ export class StorageManager {
         data.forEach((storage, id) => {
             // Still need to actually create the class
             this.storages[id] = Object.create(
-                COMPONENT_STORAGES.get(storage.storageKind)!.prototype,
+                COMPONENT_STORAGES.get(storage.id)!.prototype,
                 Object.getOwnPropertyDescriptors(storage)
             );
         });
     }
 
-    getStorage(id: number, storageId: number) {
-        if (this.storages[id]) return this.storages[id];
+    private createStorage(id: number, storageId: number): ComponentStorage {
+        const StorageClass = COMPONENT_STORAGES.get(storageId)!;
+        const storage = new StorageClass(id, this.world.maxEntities);
 
-        this.storages[id] = new (COMPONENT_STORAGES.get(storageId)!)(
-            id,
-            this.world.maxEntities
-        );
+        if (storage.needsUpdate) this.updateQueue.push(storage);
+
+        if (!this.storagesByType.has(storage.kind)) {
+            this.storagesByType.set(storage.kind, [storage]);
+        } else {
+            this.storagesByType.get(storage.kind)!.push(storage);
+        }
 
         logger.log(
             "Created new data storage for",
@@ -37,6 +46,14 @@ export class StorageManager {
             ")"
         );
 
+        return storage;
+    }
+
+    getStorage(id: number, storageId: number) {
+        if (this.storages[id]) return this.storages[id];
+
+        this.storages[id] = this.createStorage(id, storageId);
+
         return this.storages[id];
     }
 
@@ -45,7 +62,39 @@ export class StorageManager {
             this.storages[i].resize(maxEnts);
         }
     }
+
+    update() {
+        for (let i = this.updateQueue.length - 1; i >= 0; i--) {
+            this.updateQueue[i].update!();
+        }
+    }
+
+    getAllByType<T extends TypeId<ComponentStorage>>(
+        type: T
+    ): ReadonlyArray<ExtractTypeId<T>> {
+        return (this.storagesByType.get(type) ?? []) as any;
+    }
 }
+
+export interface StorageKind {
+    readonly any: TypeId<AnyComponentStorage>;
+    readonly number: TypeId<NumberComponentStorage>;
+    readonly bool: TypeId<BooleanComponentStorage>;
+}
+
+export const StorageKind: StorageKind = {} as any;
+
+export function addStorageKind<T extends keyof StorageKind>(
+    name: T,
+    id: number
+) {
+    //@ts-ignore
+    StorageKind[name] = id;
+}
+
+addStorageKind("any", 0);
+addStorageKind("number", 1);
+addStorageKind("bool", 2);
 
 export interface ComponentStorage<T = any> {
     getEnt(id: Entity): T;
@@ -54,13 +103,40 @@ export interface ComponentStorage<T = any> {
 
     resize(maxEnts: number): void;
 
-    readonly storageKind: number;
+    // Id refers to the exact storage class, while kind refers to the kind of storage
+    // For example, 2 enum storages with different options have the same kind but different ids
+    readonly id: number;
+    readonly kind: number;
+
+    readonly needsUpdate: boolean;
+
+    update?(): void;
 }
 
 export abstract class ComponentStorage<T = any> {
+    public internalArray!: ArrayLike<T | number>;
+    public readonly needsUpdate: boolean = false;
+
     constructor(public readonly id: number, size: number) {}
 
-    link<T>(object: T, property: keyof T, entity: Entity): void {
+    link<T>(
+        object: T,
+        property: keyof T,
+        entity: Entity,
+        slowBackwardsLink: boolean = false
+    ): void {
+        if (slowBackwardsLink) {
+            const getter = findGetter(object, property);
+            const setter = findSetter(object, property);
+
+            Object.defineProperty(this.internalArray, entity, {
+                get: getter ? getter : () => object[property],
+                set: setter ? setter : (v) => (object[property] = v),
+                enumerable: true,
+                configurable: true,
+            });
+        }
+
         Object.defineProperty(object, property, {
             get: () => this.getEnt(entity),
             set: (val) => this.addOrSetEnt(entity, val),
@@ -69,30 +145,36 @@ export abstract class ComponentStorage<T = any> {
 }
 
 export class AnyComponentStorage extends ComponentStorage<any> {
-    private internalArr: any[] = [];
-    public readonly storageKind = 0;
+    public internalArray: any[] = [];
+    public readonly id = StorageKind.any;
+    public readonly kind = StorageKind.any;
 
     getEnt(id: number) {
-        return this.internalArr[id];
+        return this.internalArray[id];
     }
 
     addOrSetEnt(id: number, val: any) {
-        this.internalArr[id] = val;
+        this.internalArray[id] = val;
     }
 
     deleteEnt(id: number) {
-        delete this.internalArr[id];
+        delete this.internalArray[id];
     }
 
     resize(maxEnts: number): void {}
 }
 
-//@ts-expect-error
-Object.prototype.storageType = 0;
+Object.defineProperty(Object.prototype, "storageType", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: 0,
+});
 
 export class NumberComponentStorage extends ComponentStorage<number> {
-    private internalArray: Float64Array;
-    public readonly storageKind = 1;
+    public internalArray: Float64Array;
+    public readonly id = StorageKind.number;
+    public readonly kind = StorageKind.number;
 
     constructor(id: number, maxEnts: number = 10) {
         super(id, maxEnts);
@@ -100,6 +182,25 @@ export class NumberComponentStorage extends ComponentStorage<number> {
         this.internalArray = new Float64Array(
             new SharedArrayBuffer(Float64Array.BYTES_PER_ELEMENT * maxEnts)
         );
+
+        // By default we use the faster x= operators in the number methods.
+        // However, some wrapper storages might need to know about these changes
+        // via addOrSetEnt. So if we are in a wrapper class, make sure to change these methods
+
+        const newTarget = new.target as any;
+        if (newTarget !== NumberComponentStorage && !newTarget.patchedByNCS) {
+            new.target.prototype.inc = function (ent, amount = 1) {
+                this.addOrSetEnt(ent, this.getEnt(ent) + amount);
+            };
+            new.target.prototype.mult = function (ent, amount) {
+                this.addOrSetEnt(ent, this.getEnt(ent) * amount);
+            };
+            new.target.prototype.mod = function (ent, modulo) {
+                this.addOrSetEnt(ent, this.getEnt(ent) % modulo);
+            };
+
+            newTarget.patchedByNCS = true;
+        }
     }
 
     resize(maxEnts: number): void {
@@ -121,14 +222,32 @@ export class NumberComponentStorage extends ComponentStorage<number> {
     addOrSetEnt(id: number, val: number): void {
         this.internalArray[id] = val;
     }
+
+    inc(ent: Entity, amount: number) {
+        this.internalArray[ent] += amount;
+    }
+
+    mult(ent: Entity, amount: number) {
+        this.internalArray[ent] *= amount;
+    }
+
+    mod(ent: Entity, modulo: number) {
+        this.internalArray[ent] %= modulo;
+    }
 }
 
-//@ts-ignore
-Number.prototype.storageType = 1;
+Object.defineProperty(Number.prototype, "storageType", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: 1,
+});
 
 export class BooleanComponentStorage extends ComponentStorage<boolean> {
-    private internalArray: Uint8Array;
-    public readonly storageKind: number = 2;
+    public internalArray: Uint8Array;
+
+    public readonly id: number = StorageKind.bool;
+    public readonly kind: number = StorageKind.bool;
 
     constructor(id: number, maxEnts: number) {
         super(id, maxEnts);
@@ -158,113 +277,12 @@ export class BooleanComponentStorage extends ComponentStorage<boolean> {
     }
 }
 
-// Ones that can be created
-const createEnumComponentStorage = <T extends string>(
-    id: number,
-    options: T[]
-) =>
-    class EnumComponentStorage extends ComponentStorage<T> {
-        private internalArray: Uint8Array;
-        private internalMap?: Map<any, number>;
-        public storageKind: number = id;
-
-        constructor(id: number, maxEnts: number) {
-            super(id, maxEnts);
-            this.internalArray = new Uint8Array(
-                new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * maxEnts)
-            );
-
-            // See what happens when we used a map and not an array + indexof
-            if (options.length > 20) {
-            }
-        }
-
-        getEnt(id: number): T {
-            return options[this.internalArray[id]];
-        }
-
-        addOrSetEnt(id: number, value: T): void {
-            this.internalArray[id] = options.indexOf(value);
-        }
-
-        deleteEnt(id: number): void {
-            // this.internalData[id] = 0;
-        }
-
-        resize(maxEnts: number): void {
-            const old = this.internalArray;
-            this.internalArray = new Uint8Array(
-                new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * maxEnts)
-            );
-            this.internalArray.set(old);
-        }
-    };
-
-export const registerEnumComponentStorage = <T extends string>(
-    ...options: T[]
-) => {
-    // Get the next id
-    const id = COMPONENT_STORAGES.size;
-    const EnumComponentStorage = createEnumComponentStorage(id, options);
-
-    COMPONENT_STORAGES.set(id, EnumComponentStorage);
-    CUSTOM_COMPONENT_STORAGES.set(id, {
-        type: "enum",
-        options,
-    });
-    return id;
-};
-
-const createNullableComponentStorage = <T>(
-    id: number,
-    originalStorageId: number
-) => {
-    const superStorage = COMPONENT_STORAGES.get(originalStorageId)! as Class<
-        ComponentStorage<T>
-    >;
-
-    return class NullableComponentStorage extends superStorage {
-        private readonly nullValues: Set<number> = new Set();
-        public readonly storageKind: number = id;
-
-        declare id: number;
-
-        addOrSetEnt(id: Entity, val: T): void {
-            if (val == null) {
-                this.nullValues.add(id);
-            } else {
-                super.addOrSetEnt(id, val);
-            }
-        }
-
-        getEnt(id: Entity): T {
-            if (this.nullValues.has(id)) return null as any;
-            return super.getEnt(id);
-        }
-
-        resize(maxEnts: number): void {
-            super.resize(maxEnts);
-        }
-
-        deleteEnt(id: Entity): void {
-            super.deleteEnt(id);
-        }
-    };
-};
-
-export const registerNullableComponentStorage = <T>(
-    originalStorageId: number
-) => {
-    const id = COMPONENT_STORAGES.size;
-    const storage = createNullableComponentStorage(id, originalStorageId);
-
-    COMPONENT_STORAGES.set(id, storage);
-    CUSTOM_COMPONENT_STORAGES.set(id, {
-        type: "nullable",
-        originalStorageId,
-    });
-    return id;
-};
+Object.defineProperty(Boolean.prototype, "storageType", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: 2,
+});
 
 export const COMPONENT_STORAGES: Map<
     number,
@@ -273,28 +291,4 @@ export const COMPONENT_STORAGES: Map<
 
 COMPONENT_STORAGES.set(0, AnyComponentStorage);
 COMPONENT_STORAGES.set(1, NumberComponentStorage);
-
-export const CUSTOM_COMPONENT_STORAGES: Map<number, any> = new Map();
-export function loadCustomComponentStorages(customStorages: Map<number, any>) {
-    logger.log(
-        "Loading custom storage classes from data dump:",
-        customStorages
-    );
-
-    for (const [id, data] of customStorages) {
-        switch (data.type) {
-            case "enum": {
-                const storage = createEnumComponentStorage(id, data.options);
-                COMPONENT_STORAGES.set(id, storage);
-                break;
-            }
-            case "nullable": {
-                const storage = createNullableComponentStorage(
-                    id,
-                    data.originalId
-                );
-                COMPONENT_STORAGES.set(id, storage);
-            }
-        }
-    }
-}
+COMPONENT_STORAGES.set(2, BooleanComponentStorage);

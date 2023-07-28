@@ -1,17 +1,11 @@
-import { extname } from "path";
 import { Logger } from "../utils/logger";
-import { flattenTree } from "../utils/tree";
-import {
-    DeepWriteable,
-    FixedLengthArray,
-    KeysOfObjWhere,
-    Tree,
-} from "../utils/types";
+import { FixedLengthArray, KeysOfObjWhere, Tree } from "../utils/types";
 import type { Entity } from "./entity";
 import {
     registerEnumComponentStorage,
     registerNullableComponentStorage,
-} from "./storage";
+    registerLoggedComponentStorage,
+} from "./custom_storages";
 
 const logger = new Logger("Components");
 
@@ -119,6 +113,7 @@ export interface Type {
     custom<T>(type?: T): TypeId<T>;
     component<T>(component?: { schema: T }): TypeId<T>;
     enum<T extends string>(...options: T[]): TypeId<T>;
+    logged<T>(type: TypeId<T>, bufferSize: number): TypeId<T>;
 
     tuple<
         const A extends any[],
@@ -134,11 +129,11 @@ export interface Type {
 }
 
 export const Type: Type = {
-    number: 0 as TypeId<number>,
-    bool: 1 as TypeId<boolean>,
-    any: 2 as TypeId<any>,
-    string: 2 as TypeId<string>,
-    entity: 0 as TypeId<Entity>,
+    any: 0 as TypeId<any>,
+    number: 1 as TypeId<number>,
+    bool: 2 as TypeId<boolean>,
+    string: 0 as TypeId<string>,
+    entity: 1 as TypeId<Entity>,
 
     nullable<T>(type: TypeId<T> | KeysOfObjWhere<Type, number>) {
         if (typeof type == "string") type = Type[type] as any;
@@ -149,8 +144,7 @@ export const Type: Type = {
     },
 
     custom<T>(type?: T): TypeId<T> {
-        const val = 2 as TypeId<T>;
-        return val;
+        return 0 as TypeId<T>;
     },
 
     // Used a lot
@@ -160,6 +154,10 @@ export const Type: Type = {
 
     enum<T extends string>(...options: T[]): TypeId<T> {
         return registerEnumComponentStorage(...options) as TypeId<T>;
+    },
+
+    logged<T>(type: TypeId<T>, bufferSize: number): TypeId<T> {
+        return registerLoggedComponentStorage(type, bufferSize) as TypeId<T>;
     },
 
     tuple<const A extends TypeId[]>(...args: A) {
@@ -173,27 +171,72 @@ export const Type: Type = {
 
 export class InternalComponent {
     /** @internal */
-    public readonly cachedValues: any[] = [];
+    public readonly cachedValues: any;
 }
 
-export function Component<
-    S extends Record<string, Tree<TypeId>>,
-    T extends ExtractTypesFromTypeSignatureTree<S>,
-    M extends Record<string, (this: DeepWriteable<T>, ...args: any[]) => any>
->(schema: S, methods: M = {} as M) {
-    class CustomFastComponent extends InternalComponent {
-        constructor(data: T) {
-            super();
-            flattenTree(data, this.cachedValues);
-        }
+export type ComponentClass<
+    T,
+    TMethods extends Record<string, (this: T, ...args: any[]) => any[]>,
+    TProps extends Record<string, TypeId> | TypeId
+> = {
+    new (data: T): {};
+    getId(): number;
+    readonly schema: TProps;
+} & {
+    [key in keyof TMethods]: (
+        this: T,
+        ...args: Parameters<TMethods[key]>
+    ) => ReturnType<TMethods[key]>;
+} & (TProps extends TypeId
+        ? {}
+        : {
+              readonly [key in keyof TProps]: TProps[key];
+          }) &
+    Function;
 
+export function Component<
+    TSchema extends Record<string, TypeId> | TypeId,
+    T extends ExtractTypesFromTypeSignatureTree<TSchema>,
+    TMethods extends TSchema extends TypeId
+        ? {}
+        : Record<string, (this: T, ent: Entity, ...args: any[]) => any>
+>(
+    schema: TSchema,
+    methods: TMethods = {} as TMethods
+): ComponentClass<T, TMethods, TSchema> {
+    class CustomFastComponent extends InternalComponent {
         static readonly id = getUniqueComponentId();
 
         static getId() {
             return CustomFastComponent.id;
         }
 
+        static readonly propertyNames: string[] = [];
         static readonly propertyIds: number[] = [];
+
+        constructor(data: T) {
+            super();
+
+            // Simple (1 type) component
+            if (CustomFastComponent.propertyNames.length === 0) {
+                //@ts-ignore
+                this.cachedValues = data;
+            } else {
+                //@ts-ignore
+                this.cachedValues = new Array(
+                    CustomFastComponent.propertyNames.length
+                ).fill({});
+
+                for (
+                    let i = CustomFastComponent.propertyNames.length - 1;
+                    i > -1;
+                    i--
+                ) {
+                    this.cachedValues[i] =
+                        data[CustomFastComponent.propertyNames[i]];
+                }
+            }
+        }
 
         static readonly entityRef: any = {};
         static currentEntity: Entity;
@@ -203,87 +246,49 @@ export function Component<
                 this.propertyIds[i] = ID_MAP[this.id + "-prop" + i];
             }
         }
-        static readonly schema: S = schema;
+        static readonly schema: TSchema = schema;
     }
 
-    // Init prop Id's &
-    const ids = getIdsRecursiveThroughSchema(schema);
-    for (const [key, val] of Object.entries(ids)) {
-        //@ts-expect-error
-        CustomFastComponent[key] = val;
-    }
+    // Init methods and properties for complex components ({x: Type.number, y: Type.number})
+    if (typeof schema !== "number") {
+        // Init prop Id's, names, and entity Ref
+        for (const key of Object.keys(schema)) {
+            // Ids + names
+            const id = getUniqueComponentId();
+            ID_MAP[CustomFastComponent.id + "-" + key] = id;
 
-    // Init methods
-    setEntityRefRecursiveThroughComponentIds(
-        ids,
-        CustomFastComponent.entityRef
-    );
-    for (const [key, method] of Object.entries(methods ?? {})) {
-        //@ts-expect-error
-        CustomFastComponent[key] = function (ent: Entity, ...args: any[]) {
-            this.currentEntity = ent;
-            method.apply(this.entityRef, args);
-        };
-    }
+            CustomFastComponent.propertyIds.push(id);
+            CustomFastComponent.propertyNames.push(key);
+            //@ts-expect-error
+            CustomFastComponent[key] = id;
 
-    return CustomFastComponent as any as {
-        new (data: T): {};
-        readonly schema: S;
-        getId(): number;
-    } & {
-        [key in keyof M]: (
-            ent: Entity,
-            ...args: Parameters<M[key]>
-        ) => ReturnType<M[key]>;
-    } & UnwrapTypeSignatures<S>;
-
-    function getIdsRecursiveThroughSchema(schema: Tree<TypeId>) {
-        if (typeof schema == "number") {
-            const propId = getUniqueComponentId();
-            ID_MAP[
-                CustomFastComponent.id +
-                    "-prop" +
-                    CustomFastComponent.propertyIds.length
-            ] = propId;
-            CustomFastComponent.propertyIds.push(propId);
-            return propId;
+            // Init entityRef (used for methods)
+            Object.defineProperty(CustomFastComponent.entityRef, key, {
+                get(this: typeof CustomFastComponent) {
+                    return this.currentEntity.get(id);
+                },
+                set(this: typeof CustomFastComponent, v) {
+                    this.currentEntity.update(id, v);
+                },
+            });
         }
 
-        let obj = {} as any;
-
-        for (const [key, val] of Object.entries(schema)) {
-            obj[key] = getIdsRecursiveThroughSchema(val);
-        }
-
-        return obj;
-    }
-
-    function setEntityRefRecursiveThroughComponentIds(
-        ids: Tree<number>,
-        currentObj: any
-    ) {
-        for (const [key, val] of Object.entries(ids)) {
-            if (typeof val !== "number") {
-                currentObj[key] = {};
-                setEntityRefRecursiveThroughComponentIds(
-                    (ids as any)[key],
-                    currentObj[key]
-                );
-            } else {
-                Object.defineProperty(currentObj, key, {
-                    get(this: typeof CustomFastComponent) {
-                        return this.currentEntity.get(val);
-                    },
-                    set(this: typeof CustomFastComponent, v) {
-                        this.currentEntity.update(val, v);
-                    },
-                });
-            }
+        // Init methods
+        for (const [key, method] of Object.entries(methods)) {
+            //@ts-expect-error
+            CustomFastComponent[key] = function (
+                ...args: [ent: Entity, ...args: any[]]
+            ) {
+                CustomFastComponent.currentEntity = args[0];
+                method.apply(CustomFastComponent.entityRef, args);
+            };
         }
     }
+
+    return CustomFastComponent as any;
 }
 
-// Shout out to chatGPT holy shit that thing is good
+// Shout out to chatGPT holy that thing is good
 export type UnwrapTypeSignatures<T> = T extends TypeId<infer U>
     ? U extends Record<string, TypeId> // check if U is an object to handle nested objects
         ? {
@@ -296,12 +301,15 @@ export type UnwrapTypeSignatures<T> = T extends TypeId<infer U>
     ? { +readonly [K in keyof T]: UnwrapTypeSignatures<T[K]> }
     : T;
 
-export type ExtractTypesFromTypeSignatureTree<T extends Tree<any>> = {
-    +readonly [K in keyof T]: T[K] extends TypeId<infer U>
-        ? ExtractTypesFromTypeSignatureTree<U>
-        : ExtractTypesFromTypeSignatureTree<T[K]>;
-};
+export type ExtractTypesFromTypeSignatureTree<T extends Tree<any>> =
+    T extends TypeId<infer U>
+        ? U
+        : {
+              +readonly [K in keyof T]: T[K] extends TypeId<infer U>
+                  ? ExtractTypesFromTypeSignatureTree<U>
+                  : ExtractTypesFromTypeSignatureTree<T[K]>;
+          };
 
-export type ExtractTypesFromTypeSignature<T> = T extends TypeId<infer U>
+export type ExtractTypeId<T> = T extends TypeId<infer U>
     ? U
     : ExtractTypesFromTypeSignatureTree<T>;
