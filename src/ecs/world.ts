@@ -3,16 +3,16 @@ import { Entity, intoID, loadEntityMethods } from "./entity";
 import "../utils/setFns";
 import { QueryManager, QueryModifier } from "./query";
 import { StorageManager } from "./storage";
-import { InternalSystem } from "./system";
+import { BagelSystem, SystemOrdering } from "./system";
 import { SystemManager } from "./system_manager";
 import { WorkerManager } from "./worker_manager";
 import { ArchetypeManager } from "./archetype";
 import { ResourceManager } from "./resource";
 import { Logger } from "../utils/logger";
-import { TypeId, loadComponentMethods } from "./component";
-import { loadSetMethods } from "../utils/setFns";
 import "./relationships";
 import "./hierarchy";
+import { TypeId } from "./types";
+import { EntityComponent, Resource } from "./component";
 
 const logger = new Logger("World");
 
@@ -27,6 +27,8 @@ export class World {
     public readonly systemManager: SystemManager;
     public readonly archetypeManager: ArchetypeManager;
     public readonly resourceManager: ResourceManager;
+
+    private readonly reservedEntity = 0 as Entity;
 
     constructor(private internalMaxEntities: number) {
         logger.group("Creating world with", internalMaxEntities, "entities");
@@ -68,7 +70,7 @@ export class World {
     }
 
     private openEntIds: number[] = [];
-    private nextEntId: number = 0;
+    private nextEntId: number = 1;
 
     spawn(...components: (any | [any, number])[]): Entity {
         const ent = (this.openEntIds.pop() ?? this.nextEntId++) as Entity;
@@ -97,52 +99,117 @@ export class World {
         return this.queryManager.query(...modifiers);
     }
 
-    addSystem(system: Class<InternalSystem<any>> | InternalSystem<any>) {
-        if (!(system instanceof InternalSystem)) system = new system(this);
+    addSystem(
+        system: Class<BagelSystem<any>> | BagelSystem<any>,
+        schedule: string | false = "DEFAULT",
+        enable: boolean = true,
+        ordering?: SystemOrdering
+    ) {
+        if (!(system instanceof BagelSystem)) system = new system(this);
+        const sys = system.constructor as typeof BagelSystem;
+
+        ordering ??= sys.runOrder;
 
         this.systemManager.addSystem(system);
+        system.init();
+
+        if (schedule === false) {
+            return this;
+        }
+
+        this.systemManager.addToSchedule(
+            sys.id,
+            schedule as string,
+            ordering,
+            enable
+        );
+        return this;
     }
 
     async addRemoteSystem(url: string, numThreads?: number) {
         const id = await this.workerManager.loadWorkerSystem(url, numThreads);
         this.systemManager.addRemoteSystem(id);
+        return this;
     }
 
-    enable(system: Class<InternalSystem<any>>) {
-        this.systemManager.enableSystem((system as any).id);
+    createSchedule(name: string, ...systems: Class<BagelSystem<any>>[]) {
+        this.systemManager.createSchedule(
+            name,
+            ...systems.map((sys) => (sys as typeof BagelSystem).id)
+        );
+
+        return this;
     }
 
-    disable(system: Class<InternalSystem<any>>) {
-        this.systemManager.disable((system as any).id);
+    addToSchedule(
+        system: Class<BagelSystem<any>>,
+        schedule: string = "DEFAULT",
+        ordering?: SystemOrdering,
+        enabled = true
+    ) {
+        this.systemManager.addToSchedule(
+            (system as typeof BagelSystem).id,
+            schedule,
+            ordering ?? (system as typeof BagelSystem).runOrder,
+            enabled
+        );
+        return this;
     }
 
-    tick(): Promise<void> {
+    enable(system: Class<BagelSystem<any>>, schedule = "DEFAULT") {
+        this.systemManager.enable((system as typeof BagelSystem).id, schedule);
+        return this;
+    }
+
+    disable(system: Class<BagelSystem<any>>, schedule = "DEFAULT") {
+        this.systemManager.disable((system as typeof BagelSystem).id, schedule);
+    }
+
+    tick(schedule: string = "DEFAULT"): Promise<void> {
         this.storageManager.update();
-        return this.update();
+        return this.update(schedule);
     }
 
-    update(...systems: (Class<InternalSystem<any>> | number)[]): Promise<void> {
-        for (let i = systems.length - 1; i >= 0; i--) {
-            if (typeof systems[i] !== "number") {
-                systems[i] = (systems[i] as any).id;
+    update(systems: Class<BagelSystem<any>>[]): Promise<void>;
+    update(schedule?: string): Promise<void>;
+    update(arg: string | Class<BagelSystem<any>>[] = "DEFAULT"): Promise<void> {
+        if (typeof arg === "string") {
+            return this.systemManager.update(arg);
+        }
+
+        for (let i = arg.length - 1; i >= 0; i--) {
+            if (typeof arg[i] !== "number") {
+                //@ts-ignore
+                arg[i] = (arg[i] as typeof BagelSystem).id;
             }
         }
 
-        return this.systemManager.update(systems as number[]);
+        return this.systemManager.update(arg as any);
     }
 
-    addResource(resource: any, id?: intoID) {
-        this.resourceManager.addResource(resource, id);
+    // Resources (Meant to mimic the entity / component API)
+    // Under the hood, it uses the same storage system, but without the archetype stuff
+    add(resource: any, id: intoID = resource.constructor.getId()) {
+        if (resource instanceof EntityComponent) {
+            resource.copyIntoStorage(this, this.reservedEntity);
+            return;
+        }
+
+        if (typeof id !== "number") {
+            id = id.getId();
+        }
+
+        World.GLOBAL_WORLD.storageManager
+            .getOrCreateStorage(id, resource.storageKind)
+            .addOrSetEnt(this.reservedEntity, resource);
     }
 
-    removeResource(id: intoID) {
-        this.resourceManager.removeResource(id);
-    }
+    get = this.reservedEntity.get.bind(this.reservedEntity);
+    set = this.reservedEntity.set.bind(this.reservedEntity);
 
-    getResource<T extends Class<any>>(resource: T): InstanceType<T>;
-    getResource<T>(id: intoID | TypeId<T>): T;
+    remove(id: intoID) {
+        if (typeof id !== "number") id = id.getId();
 
-    getResource<T>(id: intoID | TypeId<T>): T {
-        return this.resourceManager.getResource(id);
+        this.storageManager.storages[id].deleteEnt(this.reservedEntity);
     }
 }

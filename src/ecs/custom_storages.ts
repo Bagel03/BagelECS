@@ -1,6 +1,5 @@
 import { Logger } from "../utils/logger";
 import { Class } from "../utils/types";
-import { TypeId } from "./component";
 import { Entity } from "./entity";
 import {
     COMPONENT_STORAGES,
@@ -8,56 +7,125 @@ import {
     StorageKind,
     addStorageKind,
 } from "./storage";
+import { TypeId } from "./types";
 
 const logger = new Logger("Custom Storages");
 
-export const CUSTOM_COMPONENT_STORAGES: Map<number, any> = new Map();
-export function loadCustomComponentStorages(customStorages: Map<number, any>) {
+export type CustomComponentStorageOptions =
+    | ({ type: typeof StorageKind.logged } & LoggedComponentStorageOptions)
+    | ({ type: typeof StorageKind.enum } & EnumComponentStorageOptions)
+    | ({ type: typeof StorageKind.nullable } & NullableComponentStorageOptions)
+    | ({ type: typeof StorageKind.ranged } & RangedComponentStorageOptions);
+
+export const CUSTOM_COMPONENT_STORAGES: Map<
+    number,
+    CustomComponentStorageOptions
+> = new Map();
+
+export function loadCustomComponentStorages(
+    customStorages: Map<number, CustomComponentStorageOptions>
+) {
     logger.log(
         "Loading custom storage classes from data dump:",
         customStorages
     );
 
     for (const [id, data] of customStorages) {
-        switch (data.type) {
-            case "enum": {
-                const storage = createEnumComponentStorage(id, data.options);
-                COMPONENT_STORAGES.set(id, storage);
-                break;
-            }
-            case "nullable": {
-                const storage = createNullableComponentStorage(
-                    id,
-                    data.originalId
-                );
-                COMPONENT_STORAGES.set(id, storage);
-            }
-        }
+        COMPONENT_STORAGES.set(id, createCustomStorage(data.type, data));
     }
 }
 
+export const customComponentStorageCache: Record<
+    number,
+    Map<string, number>
+> = {
+    3: new Map(),
+    4: new Map(),
+    5: new Map(),
+    6: new Map(),
+};
+
 declare module "./storage" {
-    export interface StorageKind {
-        readonly logged: TypeId<LoggedComponentStorage<any>>;
-        readonly enum: TypeId<EnumComponentStorage<any>>;
-        readonly nullable: TypeId<NullableComponentStorage<any>>;
+    interface StorageKind {
+        readonly logged: TypeId<LoggedComponentStorage<any>> & 3;
+        readonly enum: TypeId<EnumComponentStorage<any>> & 4;
+        readonly nullable: TypeId<NullableComponentStorage<any>> & 5;
+        readonly ranged: TypeId<RangedComponentStorage<any>> & 6;
     }
 }
 
 addStorageKind("logged", 3);
 addStorageKind("enum", 4);
 addStorageKind("nullable", 5);
+addStorageKind("ranged", 6);
+
+const customStorageFactories = {
+    3: createLoggedStorage,
+    4: createEnumComponentStorage,
+    5: createNullableComponentStorage,
+    6: createRangedComponentStorage,
+} as any as Record<
+    number,
+    (
+        id: number,
+        options: CustomComponentStorageOptions
+    ) => Class<ComponentStorage<any>>
+>;
+
+export function createCustomStorage(
+    id: number,
+    options: CustomComponentStorageOptions
+): Class<ComponentStorage<any>> {
+    return customStorageFactories[options.type](id, options);
+}
+
+export function registerCustomStorage(
+    options: CustomComponentStorageOptions
+): number {
+    const optionsStr = JSON.stringify(options);
+
+    if (customComponentStorageCache[options.type].has(optionsStr)) {
+        return customComponentStorageCache[options.type].get(optionsStr)!;
+    }
+
+    const id = COMPONENT_STORAGES.size;
+
+    customComponentStorageCache[options.type].set(optionsStr, id);
+
+    const constructor = customStorageFactories[options.type](id, options);
+    COMPONENT_STORAGES.set(id, constructor);
+    CUSTOM_COMPONENT_STORAGES.set(id, options);
+    return id;
+}
+
+/* Each custom component implementation storage has 3 parts
+    - An interface:
+        interface xyzComponentStorage extends ComponentStorage {}
+        Holds typings for that kind of storage, as most of them are just extended classes
+    
+    - Options: 
+        interface xyzComponentStorageOptions 
+        The options that you pass into the constructor
+    
+    - A factory function:
+        function createXYZStorage(id: number, options: Options): ComponentStorage
+        It actually creates the storage class given the ID
+*/
 
 export interface LoggedComponentStorage<T> extends ComponentStorage<T> {
     rollback(numFrames: number, clearFuture?: boolean): void;
 }
 
+interface LoggedComponentStorageOptions {
+    backingStorageId: number;
+    bufferSize: number;
+}
+
 function createLoggedStorage<T>(
     id: number,
-    originalStorageId: number,
-    bufferSize: number
+    { backingStorageId, bufferSize }: LoggedComponentStorageOptions
 ): Class<ComponentStorage<T>> {
-    const superStorage = COMPONENT_STORAGES.get(originalStorageId)! as Class<
+    const superStorage = COMPONENT_STORAGES.get(backingStorageId)! as Class<
         ComponentStorage<T>
     >;
 
@@ -102,7 +170,7 @@ function createLoggedStorage<T>(
 
         // This is the number of frames BEFORE the current frame to go back.
         // For example, rollback(0) will set the state back to the start of this frame
-        rollback(numFrames: number, clearFuture: boolean = false) {
+        rollback(numFrames: number) {
             if (numFrames > this.bufferSize) {
                 logger.log(
                     "Can not rollback",
@@ -121,34 +189,9 @@ function createLoggedStorage<T>(
                     super.addOrSetEnt(ent, val);
                 });
             }
-            if (clearFuture) this.writeableLog.splice(0, numFrames + 1);
+            this.writeableLog.splice(0, numFrames + 1);
         }
     };
-}
-
-const loggedStorageCache = new Map<string, number>();
-
-export function registerLoggedComponentStorage(
-    originalStorageId: number,
-    bufferSize: number
-) {
-    if (loggedStorageCache.has(originalStorageId + "-" + bufferSize)) {
-        return loggedStorageCache.get(originalStorageId + "-" + bufferSize)!;
-    }
-
-    const id = COMPONENT_STORAGES.size;
-
-    const storage = createLoggedStorage(id, originalStorageId, bufferSize);
-
-    COMPONENT_STORAGES.set(id, storage);
-    CUSTOM_COMPONENT_STORAGES.set(id, {
-        type: "logged",
-        originalStorageId,
-        rollbackDepth: bufferSize,
-    });
-    loggedStorageCache.set(originalStorageId + "-" + bufferSize, id);
-
-    return id;
 }
 
 export interface EnumComponentStorage<T extends string>
@@ -156,11 +199,15 @@ export interface EnumComponentStorage<T extends string>
     readonly options: ReadonlyArray<T>;
 }
 
+interface EnumComponentStorageOptions<T extends string = string> {
+    options: T[];
+}
+
 // Ones that can be created
-const createEnumComponentStorage = <T extends string>(
+function createEnumComponentStorage<T extends string>(
     newId: number,
-    options: T[]
-) =>
+    { options }: EnumComponentStorageOptions<T>
+) {
     class EnumStorage
         extends ComponentStorage<T>
         implements EnumComponentStorage<T>
@@ -202,32 +249,21 @@ const createEnumComponentStorage = <T extends string>(
             );
             this.internalArray.set(old);
         }
-    };
-
-export const registerEnumComponentStorage = <T extends string>(
-    ...options: T[]
-) => {
-    // Get the next id
-    const id = COMPONENT_STORAGES.size;
-    const EnumComponentStorage = createEnumComponentStorage(id, options);
-
-    COMPONENT_STORAGES.set(id, EnumComponentStorage);
-    CUSTOM_COMPONENT_STORAGES.set(id, {
-        type: "enum",
-        options,
-    });
-    return id;
-};
+    }
+}
 
 export interface NullableComponentStorage<T> extends ComponentStorage<T> {}
+interface NullableComponentStorageOptions {
+    backingStorageId: number;
+}
 
-const createNullableComponentStorage = <T>(
+function createNullableComponentStorage<T>(
     id: number,
-    originalStorageId: number
-) => {
-    const superStorage = COMPONENT_STORAGES.get(originalStorageId)! as Class<
-        ComponentStorage<T>
-    >;
+    options: NullableComponentStorageOptions
+) {
+    const superStorage = COMPONENT_STORAGES.get(
+        options.backingStorageId
+    )! as Class<ComponentStorage<T>>;
 
     return class NullableStorage
         extends superStorage
@@ -258,18 +294,56 @@ const createNullableComponentStorage = <T>(
             super.deleteEnt(id);
         }
     };
-};
+}
 
-export const registerNullableComponentStorage = <T>(
-    originalStorageId: number
-) => {
-    const id = COMPONENT_STORAGES.size;
-    const storage = createNullableComponentStorage(id, originalStorageId);
+/* 
+    Ranged component storages only hold on to data for a range of entities, not World.maxEntityCount
 
-    COMPONENT_STORAGES.set(id, storage);
-    CUSTOM_COMPONENT_STORAGES.set(id, {
-        type: "nullable",
-        originalStorageId,
-    });
-    return id;
-};
+    This is done by extending the backing storage and shifting the entity range to start at 0
+*/
+export interface RangedComponentStorage<T> extends ComponentStorage<T> {}
+interface RangedComponentStorageOptions {
+    backingStorageId: number;
+    capacity: number;
+}
+
+function createRangedComponentStorage<T>(
+    id: number,
+    { backingStorageId, capacity }: RangedComponentStorageOptions
+) {
+    const superStorage = COMPONENT_STORAGES.get(backingStorageId)! as Class<
+        ComponentStorage<T>
+    >;
+
+    return class RangedStorage
+        extends superStorage
+        implements RangedComponentStorage<T>
+    {
+        private first!: number;
+        public readonly kind = StorageKind.ranged;
+
+        constructor() {
+            super(id, capacity);
+        }
+
+        addOrSetEnt(id: Entity, val: T): void {
+            if (this.first === undefined) {
+                this.first = id;
+            }
+
+            return super.addOrSetEnt((id - this.first) as Entity, val);
+        }
+
+        getEnt(id: Entity): T {
+            return super.getEnt((id - this.first) as Entity);
+        }
+
+        deleteEnt(id: Entity): void {
+            return super.deleteEnt((id - this.first) as Entity);
+        }
+
+        resize(maxEnts: number): void {
+            return;
+        }
+    };
+}

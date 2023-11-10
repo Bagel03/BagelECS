@@ -1,19 +1,11 @@
 import { Class, KeysOfObjWhere, Tree } from "../utils/types";
-import {
-    Component,
-    ComponentClass,
-    ExtractTypeId,
-    ExtractTypesFromTypeSignatureTree,
-    InternalComponent,
-    Type,
-    TypeId,
-    UnwrapTypeSignatures,
-} from "./component";
+import { Component, EntityComponent, PODComponent } from "./component";
 import { World } from "./world";
 import { Logger } from "../utils/logger";
 import { loadRelationshipMethods } from "./relationships";
 import { loadHierarchyMethods } from "./hierarchy";
 import { NumberComponentStorage } from "./storage";
+import { Type, TypeId } from "./types";
 
 const logger = new Logger("Entities");
 
@@ -25,13 +17,15 @@ export interface EntityAPI {
     add(component: any, id?: intoID): void;
     update(component: any): void;
     update<T>(id: intoID | TypeId<T>, component: T): void;
-
-    get<T extends ComponentClass<any, {}, TypeId>>(
-        component: T
-    ): T extends ComponentClass<any, {}, TypeId<infer U>> ? U : never;
-
+    set(component: any): void;
+    set<T>(id: intoID | TypeId<T>, component: T): void;
+    
+    get<T>(id: intoID): T;
+    get<T>(typeId: TypeId<T>): T;
+    // For calling methods on components (ent.get(Vector).add)
+    get<T extends Class<EntityComponent<any>>>(component: T): T;
     get<T extends Class<any>>(component: T): InstanceType<T>;
-    get<T>(id: intoID | TypeId<T>): T;
+
     remove(id: intoID): void;
     has(id: intoID): boolean;
 
@@ -45,18 +39,6 @@ export interface EntityAPI {
             ? Type[key]
             : never]: Type[key] extends TypeId ? Type[key]["_type"] : never;
     };
-
-    link<
-        TTypeID extends Tree<TypeId>,
-        TType extends ExtractTypeId<TTypeID>,
-        TObject extends {},
-        TKey extends KeysOfObjWhere<TObject, TType>
-    >(
-        component: TTypeID,
-        object: TObject,
-        key: TKey,
-        slowBackwardsLink?: boolean
-    ): void;
 
     getLinkInfo<T = any>(
         component: TypeId<T>
@@ -93,26 +75,9 @@ export function loadEntityMethods() {
     ) {
         World.GLOBAL_WORLD.archetypeManager.entityAddComponent(this, id);
 
-        if (component instanceof InternalComponent) {
-            const { propertyIds, propertyNames, schema } =
-                component.constructor as any;
-
-            if (propertyIds.length === 0) {
-                // "Simple" component
-                component = component.cachedValues;
-            } else {
-                for (let i = 0; i < propertyIds.length; i++) {
-                    const storage =
-                        World.GLOBAL_WORLD.storageManager.getStorage(
-                            propertyIds[i],
-                            schema[propertyNames[i]]
-                        );
-
-                    storage.addOrSetEnt(this, component.cachedValues[i]);
-                }
-
-                return;
-            }
+        if (component instanceof EntityComponent) {
+            component.copyIntoStorage(World.GLOBAL_WORLD, this);
+            return;
         }
 
         if (typeof id !== "number") {
@@ -120,7 +85,7 @@ export function loadEntityMethods() {
         }
 
         World.GLOBAL_WORLD.storageManager
-            .getStorage(id, component.storageType)
+            .getOrCreateStorage(id, component.storageKind)
             .addOrSetEnt(this, component);
     };
 
@@ -134,12 +99,64 @@ export function loadEntityMethods() {
 
         World.GLOBAL_WORLD.storageManager
             // It doesn't matter what storage kind we pass in, we know it already exists.
-            .getStorage(valOrId, 0)
+            .getOrCreateStorage(valOrId, 0)
             .addOrSetEnt(this, component);
     };
 
     //@ts-expect-error
+    Number.prototype.set = Number.prototype.update;
+
+    //@ts-expect-error
     Number.prototype.get = function (this: Entity, id) {
+        /* 
+        By default, if a subclass of EntityComponent is passed in, we return 
+        it after attaching ourselves. This is so we can access methods like so:
+
+            ent.get(Vector).add(ent2)
+
+        However, with PODComponents, a lot of the time we just want the data, not some
+        random class that is returned by Component():
+
+            const name = Component(Type.string);
+            ent.get(Name) -> should be a string, is actually "class extends PODComponent<string>"
+
+        We could just return the internal data of all PODComponents, but then we would be unable
+        to use methods (which are desired in some cases):
+
+            class Score extends Component(Type.number) {
+                reset() {
+                    this.data = 0;
+                }
+            }
+
+            ent.get(Score).reset();
+        
+        So, we only return the internal data if the component is a direct subclass of PODComponent.
+        In practice, this means components defined with `const x = Component()`. So components declared
+        with class X extends Component(...) will always have methods attached.
+
+            const Name = Component(Type.string)
+            class Score extends COmponent(Type.number) {
+                reset() {
+                    this.data = 0
+                }
+            }
+
+            ent.get(Name) -> string
+            ent.get(Score) -> Score (with ent internally attached)
+
+        We can tell if something is a direct subclass (1 level) by checking
+            Object.getPrototypeOf(class) === PODComponent
+        */
+
+        if (
+            id.prototype instanceof EntityComponent &&
+            Object.getPrototypeOf(id) !== PODComponent
+        ) {
+            id.currentEntity = this;
+            return id;
+        }
+
         if (typeof id !== "number") id = id.getId();
 
         return World.GLOBAL_WORLD.storageManager.storages[id].getEnt(this);
@@ -198,28 +215,6 @@ export function loadEntityMethods() {
                 },
             }
         );
-    };
-
-    // @ts-expect-error
-    Number.prototype.link = function (
-        this: Entity,
-        component: Tree<TypeId>,
-        object: any,
-        key: string,
-        slowBackwardsLink: boolean = false
-    ): void {
-        if (typeof component === "number") {
-            World.GLOBAL_WORLD.storageManager.storages[component].link(
-                object,
-                key,
-                this,
-                slowBackwardsLink
-            );
-        } else {
-            for (const key in Object.keys(component)) {
-                this.link((component as any)[key], object[key], key);
-            }
-        }
     };
 
     //@ts-ignore

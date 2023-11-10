@@ -3,7 +3,8 @@ import { Class } from "../utils/types";
 import { findGetter, findSetter } from "../utils/polyfills";
 import { Entity } from "./entity";
 import type { World } from "./world";
-import { ExtractTypeId, TypeId, UnwrapTypeSignatures } from "./component";
+import { TypeId } from "./types";
+import { UnwrapTypeId } from "./component";
 
 const logger = new Logger("Component Storage");
 
@@ -49,7 +50,7 @@ export class StorageManager {
         return storage;
     }
 
-    getStorage(id: number, storageId: number) {
+    getOrCreateStorage(id: number, storageId: number) {
         if (this.storages[id]) return this.storages[id];
 
         this.storages[id] = this.createStorage(id, storageId);
@@ -71,7 +72,7 @@ export class StorageManager {
 
     getAllByType<T extends TypeId<ComponentStorage>>(
         type: T
-    ): ReadonlyArray<ExtractTypeId<T>> {
+    ): ReadonlyArray<UnwrapTypeId<T>> {
         return (this.storagesByType.get(type) ?? []) as any;
     }
 }
@@ -164,7 +165,7 @@ export class AnyComponentStorage extends ComponentStorage<any> {
     resize(maxEnts: number): void {}
 }
 
-Object.defineProperty(Object.prototype, "storageType", {
+Object.defineProperty(Object.prototype, "storageKind", {
     configurable: true,
     enumerable: false,
     writable: true,
@@ -236,7 +237,7 @@ export class NumberComponentStorage extends ComponentStorage<number> {
     }
 }
 
-Object.defineProperty(Number.prototype, "storageType", {
+Object.defineProperty(Number.prototype, "storageKind", {
     configurable: true,
     enumerable: false,
     writable: true,
@@ -277,7 +278,7 @@ export class BooleanComponentStorage extends ComponentStorage<boolean> {
     }
 }
 
-Object.defineProperty(Boolean.prototype, "storageType", {
+Object.defineProperty(Boolean.prototype, "storageKind", {
     configurable: true,
     enumerable: false,
     writable: true,

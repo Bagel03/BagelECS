@@ -1,7 +1,7 @@
-import { TypeId } from "./component";
 import type { Entity, intoID } from "./entity";
 import { getBits } from "../utils/bits";
 import { QueryModifierFactory, With } from "./query";
+import { TypeId } from "./types";
 
 declare module "./entity" {
     interface EntityAPI {

@@ -1,7 +1,7 @@
 import { Logger } from "../utils/logger";
 import { Class } from "../utils/types";
-import { TypeId } from "./component";
 import { intoID } from "./entity";
+import { TypeId } from "./types";
 import { World } from "./world";
 
 const logger = new Logger("World", "Resources");

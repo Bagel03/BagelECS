@@ -4,7 +4,7 @@ const logger = new Logger("Worker Thread");
 logger.groupCollapsed("Worker thread created");
 
 import { StorageManager } from "./storage";
-import { InternalSystem } from "./system";
+import { BagelSystem } from "./system";
 import { MessageType } from "./worker_manager";
 import { World } from "./world";
 import { Archetype } from "./archetype";
@@ -31,19 +31,15 @@ const GLOBAL_WORLD = new World(100);
         component: any,
         id: number = component.getId()
     ) {
-        console.warn(
-            "Components can not be added or removed by worker systems"
-        );
+        console.warn("Components can not be added or removed by worker systems");
     };
 
     //@ts-expect-error
     Number.prototype.delete = function (id: number) {
-        console.warn(
-            "Components can not be added or removed by worker systems"
-        );
+        console.warn("Components can not be added or removed by worker systems");
     };
 
-    StorageManager.prototype.getStorage = function (id: number) {
+    StorageManager.prototype.getOrCreateStorage = function (id: number) {
         if (this.storages[id]) return this.storages[id];
         // This should never happen, as new components couldn't be added in the first place
         throw new Error("Can not create new storage type inside of workers");
@@ -51,11 +47,11 @@ const GLOBAL_WORLD = new World(100);
 }
 
 logger.groupEnd();
-let SYSTEM: InternalSystem<any>;
-let SystemClass: Class<InternalSystem<any>> & { id: number };
+let SYSTEM: BagelSystem<any>;
+let SystemClass: Class<BagelSystem<any>> & { id: number };
 
 export function registerRemoteSystem(
-    system: Class<InternalSystem<any>> & { id: number }
+    system: Class<BagelSystem<any>> & { id: number }
 ) {
     SystemClass = system;
 }
@@ -67,9 +63,7 @@ onmessage = async function workerSystemOnMessage(ev) {
 
             loadCustomComponentStorages(ev.data.customStorages);
             GLOBAL_WORLD.storageManager.loadFromData(ev.data.storage);
-            GLOBAL_WORLD.archetypeManager.loadFromData(
-                ev.data.archetypeManager
-            );
+            GLOBAL_WORLD.archetypeManager.loadFromData(ev.data.archetypeManager);
             GLOBAL_WORLD.resourceManager.loadFromData(ev.data.resources);
 
             SYSTEM = new SystemClass(GLOBAL_WORLD);

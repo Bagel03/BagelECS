@@ -1,4 +1,4 @@
-import { isClass } from "../exports";
+import { isClass } from "../utils/class";
 import { Archetype } from "./archetype";
 import { Entity, intoID } from "./entity";
 import type { World } from "./world";
