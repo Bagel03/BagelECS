@@ -14,6 +14,7 @@
   "scripts": {
     "build": "esbuild bundle=./src/exports/index.ts bundle.worker=./src/exports/worker.ts --chunk-names=shared --bundle --splitting --outdir=./dist --sourcemap --format=esm --minify",
     "types": "dts-bundle-generator -o ./dist/types.d.ts ./src/exports/types.ts --inline-declare-global",
+    "tempBuild": "tsc src/exports/types.ts --outDir=tempBuild",
     "fullPack": "npm run build && npm run types && npm pack"
   },
   "exports": {

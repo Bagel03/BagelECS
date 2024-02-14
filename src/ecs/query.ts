@@ -45,6 +45,8 @@ export class Query {
     }
 
     addTargetedArchetype(archetype: Archetype) {
+        if (this.targetedArchetypes.includes(archetype)) return;
+
         this.targetedArchetypes.push(archetype);
         this.lastCheckedArchetypes.set(archetype, -Infinity);
     }
@@ -120,12 +122,10 @@ export class Query {
 
             // If nothing has changed in this archetype, just remove all the stuff
             if (
-                archetype.lastModified ===
-                this.lastCheckedArchetypes.get(archetype)!
+                archetype.lastModified === this.lastCheckedArchetypes.get(archetype)!
             ) {
                 for (
-                    let j =
-                        this.targetedArchetypes[i].entities[0] - this.offset;
+                    let j = this.targetedArchetypes[i].entities[0] - this.offset;
                     j > 0;
                     j -= this.stepSize
                 ) {
@@ -135,14 +135,11 @@ export class Query {
                 }
             } else {
                 for (
-                    let j =
-                        this.targetedArchetypes[i].entities[0] - this.offset;
+                    let j = this.targetedArchetypes[i].entities[0] - this.offset;
                     j > 0;
                     j -= this.stepSize
                 ) {
-                    const ent = this.targetedArchetypes[i].entities[
-                        j
-                    ] as Entity;
+                    const ent = this.targetedArchetypes[i].entities[j] as Entity;
                     if (!state.has(ent)) {
                         state.add(ent);
                         addedFn(ent);
@@ -171,7 +168,7 @@ export class Query {
 export class QueryManager {
     private queries: Query[] = [];
 
-    constructor(private world: World) {}
+    constructor(public world: World) {}
 
     // Used for one time queries
     query(...modifiers: QueryModifier[]): Query {
@@ -196,7 +193,6 @@ export class QueryManager {
         }
     }
 
-    /** @internal */
     onNewArchetypeCreated(archetype: Archetype) {
         for (let i = 0; i < this.queries.length; i++) {
             if (this.queries[i].componentTester(archetype.components)) {

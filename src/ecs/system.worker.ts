@@ -64,7 +64,6 @@ onmessage = async function workerSystemOnMessage(ev) {
             loadCustomComponentStorages(ev.data.customStorages);
             GLOBAL_WORLD.storageManager.loadFromData(ev.data.storage);
             GLOBAL_WORLD.archetypeManager.loadFromData(ev.data.archetypeManager);
-            GLOBAL_WORLD.resourceManager.loadFromData(ev.data.resources);
 
             SYSTEM = new SystemClass(GLOBAL_WORLD);
 
@@ -97,7 +96,6 @@ onmessage = async function workerSystemOnMessage(ev) {
             logger.groupCollapsed("Syncing from data dump", ev.data);
             loadCustomComponentStorages(ev.data.customStorages);
             GLOBAL_WORLD.storageManager.loadFromData(ev.data.storage);
-            GLOBAL_WORLD.resourceManager.loadFromData(ev.data.resources);
             logger.logOk(
                 `System`,
                 SystemClass.name,

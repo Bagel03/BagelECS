@@ -5,6 +5,7 @@ import type { Entity } from "./entity";
 import "./storage";
 import {
     AsTypeIdTree,
+    AsTypeIdTree_Patch,
     Type,
     TypeBuilder,
     TypeId,
@@ -170,10 +171,7 @@ export class PODComponent<T> extends EntityComponent<T> {
 
     copyIntoStorage(world: World, ent: Entity): void {
         world.storageManager
-            .getOrCreateStorage(
-                this.constructor.getId(),
-                (this.cache as any).storageKind
-            )
+            .getOrCreateStorage(this.constructor.getId(), this.schema)
             .addOrSetEnt(ent, this.cache);
     }
 }
@@ -246,12 +244,11 @@ export class RecordComponent<T extends Record<string, any>> extends EntityCompon
 type NCConstructor<
     S extends Tree<TypeId>,
     T extends UnwrapTypeIdTree<S>
-> = typeof NestedComponent & {
-    readonly [K in keyof T]: TypeId<T[K]>;
-} & {
-    new (data: T): NestedComponent<S, T> & ExtraNCInstanceTypes<T>;
-    prototype: NestedComponent<S, T>;
-};
+> = typeof NestedComponent &
+    S & {
+        new (data: T): NestedComponent<S, T> & ExtraNCInstanceTypes<T>;
+        prototype: NestedComponent<S, T>;
+    };
 
 type ExtraNCInstanceTypes<T extends Record<string, any>> = {
     [K in keyof T]: T[K];
@@ -326,13 +323,11 @@ export class NestedComponent<
 
 export function Component<const T extends TypeTree>(
     schema: T
-): ComponentClass<
-    AsTypeIdTree<T> extends infer R
-        ? R extends Tree<TypeId>
-            ? R
-            : TypeId<never>
-        : TypeId<never>
-> {
+): AsTypeIdTree<T> extends infer R
+    ? R extends Tree<TypeId>
+        ? ComponentClass<R>
+        : never
+    : never {
     const realSchema = convertTypeTreeToTypeIdTree(schema);
 
     if (typeof realSchema === "number") {

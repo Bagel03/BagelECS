@@ -85,7 +85,6 @@ export class WorkerManager {
                 storage: this.world.storageManager.storages,
                 components: ID_MAP,
                 archetypeManager: this.world.archetypeManager,
-                resources: this.world.resourceManager.resources,
                 customStorages: CUSTOM_COMPONENT_STORAGES,
                 stepSize: 1,
                 offset: 0,
@@ -111,7 +110,6 @@ export class WorkerManager {
                         storage: this.world.storageManager.storages,
                         components: ID_MAP,
                         archetypeManager: this.world.archetypeManager,
-                        resources: this.world.resourceManager.resources,
                         customStorages: CUSTOM_COMPONENT_STORAGES,
                         stepSize: numThreads,
                         triggerArray,
@@ -124,9 +122,7 @@ export class WorkerManager {
 
         this.workers[systemData.id] = worker;
         this.triggerArrays[systemData.id] = triggerArray;
-        logger.logOk(
-            `Remote system ${systemData.name} (${systemData.id}) is ready`
-        );
+        logger.logOk(`Remote system ${systemData.name} (${systemData.id}) is ready`);
 
         return systemData.id;
     }

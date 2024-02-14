@@ -86,22 +86,17 @@ export class Blueprint {
         const ent = World.GLOBAL_WORLD.spawn();
 
         for (const [key, value] of this.defaultData) {
-            const storage =
-                World.GLOBAL_WORLD.storageManager.getOrCreateStorage(
-                    key,
-                    value.storageKind
-                );
+            const storage = World.GLOBAL_WORLD.storageManager.getOrCreateStorage(
+                key,
+                value.storageKind
+            );
 
             storage.addOrSetEnt(ent, value);
         }
 
         const manager = World.GLOBAL_WORLD.archetypeManager;
 
-        manager.moveWithoutGraph(
-            ent,
-            manager.defaultArchetype,
-            this.archetype!
-        );
+        manager.moveWithoutGraph(ent, manager.defaultArchetype, this.archetype!);
         return ent;
     }
 
@@ -133,7 +128,7 @@ export function BlueprintFactory<T extends TypeId[]>(
 export function BlueprintFactory<T extends TypeId[]>(
     bpOrComponents: Blueprint | (intoID | {})[],
     ...options: T
-) {
+): (...args: UnwrapTypeIdArray<T>) => Entity {
     const bp =
         bpOrComponents instanceof Blueprint
             ? bpOrComponents
@@ -154,10 +149,14 @@ export function AdvancedBlueprintFactory<
     const TComponents extends TypeId[],
     const TFunc extends (this: Entity, ...args: any[]) => void,
     TArgs extends Parameters<TFunc> = Parameters<TFunc>
->(blueprint: Blueprint, components: TComponents, fn: TFunc) {
-    return (
-        ...args: [...data: UnwrapTypeIdArray<TComponents>, ...args: TArgs]
-    ) => {
+>(
+    blueprint: Blueprint,
+    components: TComponents,
+    fn: TFunc
+): (
+    ...args: [...components: UnwrapTypeIdArray<TComponents>, ...args: TArgs]
+) => Entity {
+    return (...args: [...data: UnwrapTypeIdArray<TComponents>, ...args: TArgs]) => {
         const ent = blueprint.new();
         for (let i = components.length - 1; i > -1; i--) {
             ent.update(components[i], args[i]);

@@ -1,5 +1,7 @@
 export type Class<T> = new (...args: any[]) => T;
 
+export type AbstractInstanceType<T> = T extends { prototype: infer U } ? U : never;
+
 export type FlatTreeBranch<T> =
     | T[]
     | {

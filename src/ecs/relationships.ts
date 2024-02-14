@@ -37,17 +37,21 @@ export const loadRelationshipMethods = (extraMethods: any[]) =>
         };
 
         //@ts-expect-error
-        Number.prototype.getAllRelatedBy = function (this: Entity, by: number) {
+        Number.prototype.getAllRelatedBy = function (this: Entity, by: intoID) {
+            if (typeof by !== "number") {
+                by = by.getId();
+            }
+
             return this.components()
                 .filter((component) => component >> RELATIONSHIP_SHIFT == by)
                 .map((component) => getBits(component, 0, RELATIONSHIP_SHIFT));
         };
 
         //@ts-expect-error
-        Number.prototype.getSingleRelatedBy = function (
-            this: Entity,
-            by: number
-        ) {
+        Number.prototype.getSingleRelatedBy = function (this: Entity, by: intoID) {
+            if (typeof by !== "number") {
+                by = by.getId();
+            }
             for (const component of this.components()) {
                 if (component >> RELATIONSHIP_SHIFT == by)
                     return getBits(component, 0, RELATIONSHIP_SHIFT);

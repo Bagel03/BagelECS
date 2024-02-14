@@ -1,13 +1,13 @@
 import { Logger } from "../utils/logger";
 import { Class } from "../utils/types";
-import { Entity } from "./entity";
+import type { Entity } from "./entity";
 import {
     COMPONENT_STORAGES,
     ComponentStorage,
     StorageKind,
     addStorageKind,
 } from "./storage";
-import { TypeId } from "./types";
+import type { TypeId } from "./types";
 
 const logger = new Logger("Custom Storages");
 
@@ -17,53 +17,45 @@ export type CustomComponentStorageOptions =
     | ({ type: typeof StorageKind.nullable } & NullableComponentStorageOptions)
     | ({ type: typeof StorageKind.ranged } & RangedComponentStorageOptions);
 
-export const CUSTOM_COMPONENT_STORAGES: Map<
-    number,
-    CustomComponentStorageOptions
-> = new Map();
+export const CUSTOM_COMPONENT_STORAGES: Map<number, CustomComponentStorageOptions> =
+    new Map();
 
 export function loadCustomComponentStorages(
     customStorages: Map<number, CustomComponentStorageOptions>
 ) {
-    logger.log(
-        "Loading custom storage classes from data dump:",
-        customStorages
-    );
+    logger.log("Loading custom storage classes from data dump:", customStorages);
 
     for (const [id, data] of customStorages) {
         COMPONENT_STORAGES.set(id, createCustomStorage(data.type, data));
     }
 }
 
-export const customComponentStorageCache: Record<
-    number,
-    Map<string, number>
-> = {
-    3: new Map(),
-    4: new Map(),
-    5: new Map(),
-    6: new Map(),
+export const customComponentStorageCache: Record<number, Map<string, number>> = {
+    10: new Map(),
+    11: new Map(),
+    12: new Map(),
+    13: new Map(),
 };
 
 declare module "./storage" {
     interface StorageKind {
-        readonly logged: TypeId<LoggedComponentStorage<any>> & 3;
-        readonly enum: TypeId<EnumComponentStorage<any>> & 4;
-        readonly nullable: TypeId<NullableComponentStorage<any>> & 5;
-        readonly ranged: TypeId<RangedComponentStorage<any>> & 6;
+        readonly logged: TypeId<LoggedComponentStorage<any>> & 10;
+        readonly enum: TypeId<EnumComponentStorage<any>> & 11;
+        readonly nullable: TypeId<NullableComponentStorage<any>> & 12;
+        readonly ranged: TypeId<RangedComponentStorage<any>> & 13;
     }
 }
 
-addStorageKind("logged", 3);
-addStorageKind("enum", 4);
-addStorageKind("nullable", 5);
-addStorageKind("ranged", 6);
+addStorageKind("logged", 10);
+addStorageKind("enum", 11);
+addStorageKind("nullable", 12);
+addStorageKind("ranged", 13);
 
 const customStorageFactories = {
-    3: createLoggedStorage,
-    4: createEnumComponentStorage,
-    5: createNullableComponentStorage,
-    6: createRangedComponentStorage,
+    [StorageKind.logged]: createLoggedStorage,
+    [StorageKind.enum]: createEnumComponentStorage,
+    [StorageKind.nullable]: createNullableComponentStorage,
+    [StorageKind.ranged]: createRangedComponentStorage,
 } as any as Record<
     number,
     (
@@ -112,18 +104,22 @@ export function registerCustomStorage(
         It actually creates the storage class given the ID
 */
 
+export let LOGGED_COMPONENT_STORAGE_BUFFER_SIZE = 15;
+export function setDefaultLoggedStorageBufferSize(size: number) {
+    LOGGED_COMPONENT_STORAGE_BUFFER_SIZE = size;
+}
+
 export interface LoggedComponentStorage<T> extends ComponentStorage<T> {
     rollback(numFrames: number, clearFuture?: boolean): void;
 }
 
 interface LoggedComponentStorageOptions {
     backingStorageId: number;
-    bufferSize: number;
 }
 
 function createLoggedStorage<T>(
     id: number,
-    { backingStorageId, bufferSize }: LoggedComponentStorageOptions
+    { backingStorageId }: LoggedComponentStorageOptions
 ): Class<ComponentStorage<T>> {
     const superStorage = COMPONENT_STORAGES.get(backingStorageId)! as Class<
         ComponentStorage<T>
@@ -133,16 +129,15 @@ function createLoggedStorage<T>(
         extends superStorage
         implements LoggedComponentStorage<T>
     {
-        private readonly bufferSize = bufferSize;
+        // private readonly bufferSize = bufferSize;
         public readonly needsUpdate: boolean = true;
         public readonly id: number = id;
         public readonly kind = StorageKind.logged;
 
         // This is a list of updates to stuff,
         public readonly log: ReadonlyArray<ReadonlyMap<Entity, T> | null> =
-            new Array(bufferSize);
-        private readonly writeableLog: (Map<Entity, T> | null)[] = this
-            .log as any;
+            new Array(LOGGED_COMPONENT_STORAGE_BUFFER_SIZE);
+        private readonly writeableLog: (Map<Entity, T> | null)[] = this.log as any;
 
         addOrSetEnt(id: Entity, val: any): void {
             if (!this.log[0]) {
@@ -164,22 +159,25 @@ function createLoggedStorage<T>(
         }
 
         update() {
-            if (this.writeableLog.unshift(null) > this.bufferSize)
+            if (
+                this.writeableLog.unshift(null) >
+                LOGGED_COMPONENT_STORAGE_BUFFER_SIZE
+            )
                 this.writeableLog.pop();
         }
 
         // This is the number of frames BEFORE the current frame to go back.
         // For example, rollback(0) will set the state back to the start of this frame
         rollback(numFrames: number) {
-            if (numFrames > this.bufferSize) {
+            if (numFrames > LOGGED_COMPONENT_STORAGE_BUFFER_SIZE) {
                 logger.log(
                     "Can not rollback",
                     numFrames,
                     "frames, max buffer size is",
-                    this.bufferSize,
+                    LOGGED_COMPONENT_STORAGE_BUFFER_SIZE,
                     "frames"
                 );
-                numFrames = this.bufferSize;
+                numFrames = LOGGED_COMPONENT_STORAGE_BUFFER_SIZE;
             }
 
             for (let i = 0; i < numFrames + 1; i++) {
@@ -194,8 +192,7 @@ function createLoggedStorage<T>(
     };
 }
 
-export interface EnumComponentStorage<T extends string>
-    extends ComponentStorage<T> {
+export interface EnumComponentStorage<T extends string> extends ComponentStorage<T> {
     readonly options: ReadonlyArray<T>;
 }
 
@@ -208,7 +205,7 @@ function createEnumComponentStorage<T extends string>(
     newId: number,
     { options }: EnumComponentStorageOptions<T>
 ) {
-    class EnumStorage
+    return class EnumStorage
         extends ComponentStorage<T>
         implements EnumComponentStorage<T>
     {
@@ -249,7 +246,7 @@ function createEnumComponentStorage<T extends string>(
             );
             this.internalArray.set(old);
         }
-    }
+    };
 }
 
 export interface NullableComponentStorage<T> extends ComponentStorage<T> {}
@@ -261,9 +258,9 @@ function createNullableComponentStorage<T>(
     id: number,
     options: NullableComponentStorageOptions
 ) {
-    const superStorage = COMPONENT_STORAGES.get(
-        options.backingStorageId
-    )! as Class<ComponentStorage<T>>;
+    const superStorage = COMPONENT_STORAGES.get(options.backingStorageId)! as Class<
+        ComponentStorage<T>
+    >;
 
     return class NullableStorage
         extends superStorage

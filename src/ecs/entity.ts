@@ -4,7 +4,7 @@ import { World } from "./world";
 import { Logger } from "../utils/logger";
 import { loadRelationshipMethods } from "./relationships";
 import { loadHierarchyMethods } from "./hierarchy";
-import { NumberComponentStorage } from "./storage";
+import { AbstractNumberComponentStorage, F64ComponentStorage } from "./storage";
 import { Type, TypeId } from "./types";
 
 const logger = new Logger("Entities");
@@ -15,16 +15,17 @@ export interface EntityAPI {
     readonly world: World;
 
     add(component: any, id?: intoID): void;
-    update(component: any): void;
     update<T>(id: intoID | TypeId<T>, component: T): void;
+    update(component: any): void;
+
     set(component: any): void;
     set<T>(id: intoID | TypeId<T>, component: T): void;
-    
-    get<T>(id: intoID): T;
+
     get<T>(typeId: TypeId<T>): T;
     // For calling methods on components (ent.get(Vector).add)
-    get<T extends Class<EntityComponent<any>>>(component: T): T;
+    // get<T extends Class<EntityComponent<any>>>(component: T): T;
     get<T extends Class<any>>(component: T): InstanceType<T>;
+    get<T>(id: intoID): T;
 
     remove(id: intoID): void;
     has(id: intoID): boolean;
@@ -45,7 +46,7 @@ export interface EntityAPI {
     ): [key: number | string, obj: Record<number | string, T>];
 
     // Useful number methods
-    inc(component: TypeId<number>, amount: number): void;
+    inc(component: TypeId<number>, amount?: number): void;
     mult(component: TypeId<number>, amount: number): void;
     mod(component: TypeId<number>, modulo: number): void;
 }
@@ -94,8 +95,7 @@ export function loadEntityMethods() {
         if (component == null) component = valOrId;
 
         if (typeof valOrId == "string") valOrId = valOrId.getId();
-        else if (typeof valOrId !== "number")
-            valOrId = valOrId.constructor.getId();
+        else if (typeof valOrId !== "number") valOrId = valOrId.constructor.getId();
 
         World.GLOBAL_WORLD.storageManager
             // It doesn't matter what storage kind we pass in, we know it already exists.
@@ -149,13 +149,18 @@ export function loadEntityMethods() {
             Object.getPrototypeOf(class) === PODComponent
         */
 
-        if (
-            id.prototype instanceof EntityComponent &&
-            Object.getPrototypeOf(id) !== PODComponent
-        ) {
-            id.currentEntity = this;
-            return id;
-        }
+        // // Actually, ive given up on that rn
+        // if (id.prototype instanceof PODComponent) {
+        //     id = id.;
+        // }
+
+        // if (
+        //     id.prototype instanceof EntityComponent &&
+        //     Object.getPrototypeOf(id) !== PODComponent
+        // ) {
+        //     id.currentEntity = this;
+        //     return id;
+        // }
 
         if (typeof id !== "number") id = id.getId();
 
@@ -163,7 +168,7 @@ export function loadEntityMethods() {
     };
 
     //@ts-expect-error
-    Number.prototype.remove = function (this: Entity, id) {
+    Number.prototype.remove = function (this: Entity, id: intoID) {
         if (typeof id !== "number") id = id.getId();
 
         World.GLOBAL_WORLD.storageManager.storages[id]?.deleteEnt(this);
@@ -171,17 +176,16 @@ export function loadEntityMethods() {
     };
 
     //@ts-expect-error
-    Number.prototype.has = function (this: Entity, id) {
-        const { archetypes, entityArchetypes } =
-            World.GLOBAL_WORLD.archetypeManager;
-
-        return archetypes.get(entityArchetypes[this])!.components.has(id);
+    Number.prototype.has = function (this: Entity, id: intoID) {
+        if (typeof id !== "number") id = id.getId();
+        return World.GLOBAL_WORLD.archetypeManager.archetypes
+            .get(World.GLOBAL_WORLD.archetypeManager.entityArchetypes[this])!
+            .components.has(id);
     };
 
     //@ts-expect-error
     Number.prototype.components = function (this: Entity) {
-        const { archetypes, entityArchetypes } =
-            World.GLOBAL_WORLD.archetypeManager;
+        const { archetypes, entityArchetypes } = World.GLOBAL_WORLD.archetypeManager;
 
         return archetypes.get(entityArchetypes[this])!.components;
     };
@@ -232,12 +236,15 @@ export function loadEntityMethods() {
     Number.prototype.inc = function (
         this: Entity,
         component: TypeId<number>,
-        amount: number
+        amount: number = 1
     ) {
+        //@ts-expect-error
+        if (typeof component !== "number") component = component.getId();
+
         (
             World.GLOBAL_WORLD.storageManager.storages[
                 component
-            ] as NumberComponentStorage
+            ] as AbstractNumberComponentStorage
         ).inc(this, amount);
     };
 
@@ -247,10 +254,13 @@ export function loadEntityMethods() {
         component: TypeId<number>,
         amount: number
     ) {
+        //@ts-expect-error
+        if (typeof component !== "number") component = component.getId();
+
         (
             World.GLOBAL_WORLD.storageManager.storages[
                 component
-            ] as NumberComponentStorage
+            ] as AbstractNumberComponentStorage
         ).mult(this, amount);
     };
 
@@ -260,10 +270,13 @@ export function loadEntityMethods() {
         component: TypeId<number>,
         modulo: number
     ) {
+        //@ts-expect-error
+        if (typeof component !== "number") component = component.getId();
+
         (
             World.GLOBAL_WORLD.storageManager.storages[
                 component
-            ] as NumberComponentStorage
+            ] as AbstractNumberComponentStorage
         ).mod(this, modulo);
     };
 

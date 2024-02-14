@@ -11,24 +11,22 @@ import { ResourceManager } from "./resource";
 import { Logger } from "../utils/logger";
 import "./relationships";
 import "./hierarchy";
-import { TypeId } from "./types";
-import { EntityComponent, Resource } from "./component";
+import { EntityComponent } from "./component";
+import { EntityManager } from "./entity_manager";
 
 const logger = new Logger("World");
 
 export class World {
     public static readonly GLOBAL_WORLD: World;
 
-    public readonly entities: Int32Array;
-
     public readonly storageManager: StorageManager;
     public readonly queryManager: QueryManager;
     public readonly workerManager: WorkerManager;
     public readonly systemManager: SystemManager;
     public readonly archetypeManager: ArchetypeManager;
-    public readonly resourceManager: ResourceManager;
+    public readonly entityManager: EntityManager;
 
-    private readonly reservedEntity = 0 as Entity;
+    public readonly reservedEntity = 0 as Entity;
 
     constructor(private internalMaxEntities: number) {
         logger.group("Creating world with", internalMaxEntities, "entities");
@@ -38,13 +36,7 @@ export class World {
         this.workerManager = new WorkerManager(this);
         this.systemManager = new SystemManager(this);
         this.archetypeManager = new ArchetypeManager(this);
-        this.resourceManager = new ResourceManager(this);
-
-        this.entities = new Int32Array(
-            new SharedArrayBuffer(
-                Int32Array.BYTES_PER_ELEMENT * (internalMaxEntities + 1)
-            )
-        );
+        this.entityManager = new EntityManager(this);
 
         //@ts-ignore
         World.GLOBAL_WORLD = this;
@@ -69,30 +61,12 @@ export class World {
         this.storageManager.resize(v);
     }
 
-    private openEntIds: number[] = [];
-    private nextEntId: number = 1;
-
     spawn(...components: (any | [any, number])[]): Entity {
-        const ent = (this.openEntIds.pop() ?? this.nextEntId++) as Entity;
-        this.entities[this.entities[0]] = ent;
-        this.entities[0]++;
-
-        for (const component of components) {
-            if (Array.isArray(component)) {
-                ent.add(component[0], component[1]);
-            } else {
-                ent.add(component);
-            }
-        }
-
-        return ent;
+        return this.entityManager.spawn(...components);
     }
 
     destroy(ent: Entity) {
-        this.openEntIds.push(ent);
-        this.archetypeManager.archetypes
-            .get(this.archetypeManager.entityArchetypes[ent])!
-            .removeEntity(ent);
+        return this.entityManager.destroy(ent);
     }
 
     query(...modifiers: QueryModifier[]) {
@@ -166,7 +140,9 @@ export class World {
     }
 
     tick(schedule: string = "DEFAULT"): Promise<void> {
+        this.entityManager.update();
         this.storageManager.update();
+        this.archetypeManager.update();
         return this.update(schedule);
     }
 
@@ -189,7 +165,10 @@ export class World {
 
     // Resources (Meant to mimic the entity / component API)
     // Under the hood, it uses the same storage system, but without the archetype stuff
+    private readonly components = new Set<number>();
     add(resource: any, id: intoID = resource.constructor.getId()) {
+        this.components.add(typeof id == "number" ? id : id.getId());
+
         if (resource instanceof EntityComponent) {
             resource.copyIntoStorage(this, this.reservedEntity);
             return;
@@ -206,6 +185,10 @@ export class World {
 
     get = this.reservedEntity.get.bind(this.reservedEntity);
     set = this.reservedEntity.set.bind(this.reservedEntity);
+
+    has(id: intoID) {
+        return this.components.has(typeof id == "number" ? id : id.getId());
+    }
 
     remove(id: intoID) {
         if (typeof id !== "number") id = id.getId();

@@ -23,11 +23,8 @@ export class Archetype {
         expectedSize: number
     ) {
         this.entities = new Int32Array(
-            new SharedArrayBuffer(
-                Int32Array.BYTES_PER_ELEMENT * (expectedSize + 1)
-            )
+            new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * (expectedSize + 1))
         );
-
         this.lastModified = performance.now();
     }
 
@@ -65,22 +62,16 @@ export class Archetype {
 export class ArchetypeManager {
     public readonly archetypes: Map<number, Archetype> = new Map();
     public readonly entityArchetypes: Int32Array;
-    private nextArchetypeId = 1;
+    protected nextArchetypeId = 1;
 
-    public readonly defaultArchetype: Archetype = new Archetype(
-        0,
-        new Set(),
-        1
-    );
+    public readonly defaultArchetype: Archetype = new Archetype(0, new Set(), 10);
 
-    constructor(private world: World) {
+    constructor(public world: World) {
         // Set the default archetype, which isn't expected to have a lot of components
         this.archetypes.set(0, this.defaultArchetype);
 
         this.entityArchetypes = new Int32Array(
-            new SharedArrayBuffer(
-                Int32Array.BYTES_PER_ELEMENT * world.maxEntities
-            )
+            new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * world.maxEntities)
         );
     }
 
@@ -163,9 +154,7 @@ export class ArchetypeManager {
             return;
         }
         // TODO: Make this faster
-        const firstArchetype = this.archetypes.get(
-            this.entityArchetypes[entity]
-        )!;
+        const firstArchetype = this.archetypes.get(this.entityArchetypes[entity])!;
 
         firstArchetype.removeEntity(entity);
 
@@ -222,9 +211,7 @@ export class ArchetypeManager {
         }
 
         // Very similar to entityAddComponent, check there for comments
-        const firstArchetype = this.archetypes.get(
-            this.entityArchetypes[entity]
-        )!;
+        const firstArchetype = this.archetypes.get(this.entityArchetypes[entity])!;
 
         firstArchetype.removeEntity(entity);
 
@@ -237,8 +224,7 @@ export class ArchetypeManager {
                     if (
                         candidateArchetype.components.every(
                             (c) =>
-                                c !== component &&
-                                firstArchetype.components.has(c)
+                                c !== component && firstArchetype.components.has(c)
                         )
                     ) {
                         firstArchetype.graph.removed.set(
@@ -268,5 +254,9 @@ export class ArchetypeManager {
         for (const [_, archetype] of this.archetypes) {
             archetype.resize(maxEnts);
         }
+    }
+
+    update() {
+        // Used for overrides in multiplayer version
     }
 }

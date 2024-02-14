@@ -5,23 +5,18 @@ export class Logger {
     private color: string;
 
     constructor(...context: string[]) {
-        this.context =
-            typeof context === "string" ? context : context.join(" > ");
+        this.context = typeof context === "string" ? context : context.join(" > ");
 
         this.color = `hsl(${
             JSON.stringify(context)
                 .split("")
-                .reduce(
-                    (seed, val) => val.charCodeAt(0) + ((seed << 5) - seed),
-                    0
-                ) % 360
+                .reduce((seed, val) => val.charCodeAt(0) + ((seed << 5) - seed), 0) %
+            360
         }, 70%, 60%)`;
     }
 
     group(...data: any[]) {
-        console.group(
-            ...this.generateContextPrefix("⠀⠀", "I", "bgWhite", data)
-        );
+        console.group(...this.generateContextPrefix("⠀⠀", "I", "bgWhite", data));
     }
 
     groupCollapsed(...data: any[]) {
@@ -51,9 +46,7 @@ export class Logger {
     }
 
     warn(...data: any[]) {
-        console.warn(
-            ...this.generateContextPrefix("⚠️", "W", "bgYellow", data)
-        );
+        console.warn(...this.generateContextPrefix("⚠️", "W", "bgYellow", data));
     }
 
     error(...data: any[]) {
@@ -94,7 +87,7 @@ export class Logger {
         }
 
         return [
-            `%c ${emoji} %c ` + this.context.padEnd(30, " ") + " %c " + extra,
+            `%c ${emoji} %c ` + this.context.padEnd(25, " ") + " %c " + extra,
             `background: ${col}; color: #fff; padding: 2px 5px 0 5px;  border-top-left-radius: 3px; border-bottom-left-radius: 3px;`,
             `background: #333438; color: ${col}; border-top-right-radius: 3px; border-bottom-right-radius: 3px; padding-top: 2px`,
             "color: gray",

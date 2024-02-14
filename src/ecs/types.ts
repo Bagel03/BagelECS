@@ -1,16 +1,7 @@
-import { Logger } from "../utils/logger";
-import {
-    Class,
-    FixedLengthArray,
-    MatchingTree,
-    NullableTree,
-    Tree,
-    TreeBranch,
-} from "../utils/types";
+import { FixedLengthArray, Tree } from "../utils/types";
 import { Entity } from "./entity";
 import { StorageKind } from "./storage";
 import { registerCustomStorage } from "./custom_storages";
-import { Component } from "./component";
 
 export type TypeId<T = any> = number & {
     _type: T;
@@ -23,6 +14,7 @@ export function asTypeId<T>(val: number | string): TypeId<T> {
 export type TypeTreeLeaf = TypeId | TypeIdBuilder<any> | TypeBuilder<any>;
 export type TypeTree = Tree<TypeTreeLeaf>; //Tree<TypeId | TypeIdBuilder | TypeBuilder<any>>;
 
+export type AsTypeIdTree_Patch<T extends TypeTree> = AsTypeIdTree<TypeBuilder<T>>;
 export type AsTypeIdTree<T extends TypeTree> = T extends TypeId
     ? T
     : T extends TypeIdBuilder<infer U>
@@ -70,14 +62,11 @@ export class TypeIdBuilder<T = any> {
         );
     }
 
-    static defaultLoggedBufferSize = 15;
-
-    logged(bufferSize = TypeIdBuilder.defaultLoggedBufferSize): TypeIdBuilder<T> {
+    logged(): TypeIdBuilder<T> {
         return new TypeIdBuilder(
             registerCustomStorage({
                 type: StorageKind.logged,
                 backingStorageId: this.id,
-                bufferSize,
             }) as any
         );
     }
@@ -224,11 +213,21 @@ function TypeBuilderConstructor<T extends TypeTree>(
 
 /**  Most basic primitive types (no functions) */
 class BaseTypes {
-    static readonly any = new TypeIdBuilder(asTypeId<any>(0));
-    static readonly number = new TypeIdBuilder(asTypeId<number>(1));
-    static readonly bool = new TypeIdBuilder(asTypeId<boolean>(2));
-    static readonly string = new TypeIdBuilder(asTypeId<string>(0));
-    static readonly entity = new TypeIdBuilder(asTypeId<Entity>(1));
+    static readonly any = new TypeIdBuilder(asTypeId<any>(StorageKind.any));
+
+    static readonly bool = new TypeIdBuilder(asTypeId<boolean>(StorageKind.bool));
+    static readonly string = new TypeIdBuilder(asTypeId<string>(StorageKind.any));
+    static readonly entity = new TypeIdBuilder(asTypeId<Entity>(StorageKind.i32));
+
+    static readonly f64 = new TypeIdBuilder(asTypeId<number>(StorageKind.f64));
+    static readonly f32 = new TypeIdBuilder(asTypeId<number>(StorageKind.f32));
+    static readonly i8 = new TypeIdBuilder(asTypeId<number>(StorageKind.i8));
+    static readonly i16 = new TypeIdBuilder(asTypeId<number>(StorageKind.i16));
+    static readonly i32 = new TypeIdBuilder(asTypeId<number>(StorageKind.i32));
+    static readonly u8 = new TypeIdBuilder(asTypeId<number>(StorageKind.u8));
+    static readonly u16 = new TypeIdBuilder(asTypeId<number>(StorageKind.u16));
+    static readonly u32 = new TypeIdBuilder(asTypeId<number>(StorageKind.u32));
+    static readonly number = BaseTypes.f64;
 }
 
 /**  Function that can be used to create more complex base types */
@@ -278,6 +277,10 @@ export class FirstClassTypes {
     });
 
     static readonly directionStr = ComplexTypes.enum("UP", "DOWN", "LEFT", "RIGHT");
+    static readonly rotationDirection = ComplexTypes.enum(
+        "CLOCKWISE",
+        "COUNTERCLOCKWISE"
+    );
 }
 
 export const Type = Object.assign(
@@ -289,15 +292,8 @@ export const Type = Object.assign(
 
 export type Type = typeof Type;
 
-const y = Type({ hello: Type.string });
-type x = AsTypeIdTree<typeof y>;
-
-const x = Type({
-    x: Type.string,
-    ...Type({ y: Type.number }),
-});
-
-let z = Type({ x: Type.string, y: Type({ x: Type.number }) }).nullable();
+// const y = Type({ hello: Type.string });
+// type x = AsTypeIdTree<typeof y>;
 
 // export const Type: Type = {
 //     any: 0 as TypeIdBuilder<any>,
